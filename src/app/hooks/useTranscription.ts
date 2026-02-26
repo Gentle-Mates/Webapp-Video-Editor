@@ -1,0 +1,60 @@
+import { useState } from 'react';
+
+import { extractAudioFromVideo } from '../utils/extractAudio';
+import type { Subtitle, TranscriptionStatus } from '../utils/types';
+
+export default function useTranscription() {
+    const [status, setStatus] = useState<TranscriptionStatus>('idle');
+    const [subtitles, setSubtitles] = useState<Subtitle[]>([]);
+    const [error, setError] = useState<string | null>(null);
+
+    async function transcribe(file: File) {
+        setStatus('extracting');
+        setError(null);
+        setSubtitles([]);
+
+        try {
+            const formData = new FormData();
+
+            formData.append('file', await extractAudioFromVideo(file));
+
+            setStatus('uploading');
+
+            const response = await fetch('/api/transcribe', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+
+                throw new Error(data.error || 'Error transcription');
+            }
+
+            setStatus('transcribing');
+
+            const data = await response.json();
+
+            const subs: Subtitle[] = data.segments.map((seg: { start: number; end: number; text: string }, i: number) => ({
+                id: i + 1,
+                start: seg.start,
+                end: seg.end,
+                text: seg.text.trim()
+            }));
+
+            setSubtitles(subs);
+            setStatus('done');
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Unknown error');
+            setStatus('error');
+        }
+    }
+
+    function reset() {
+        setStatus('idle');
+        setSubtitles([]);
+        setError(null);
+    }
+
+    return { status, subtitles, error, transcribe, reset };
+}
