@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
-import { extractAudioFromVideo } from '../utils/extractAudio';
-import type { Subtitle, TranscriptionStatus } from '../utils/types';
+import { extractAudioFromVideo } from '@/utils/extractAudio';
+import type { Subtitle, TranscriptionStatus } from '@/utils/types';
 
 export default function useTranscription() {
     const [status, setStatus] = useState<TranscriptionStatus>('idle');
@@ -20,7 +20,7 @@ export default function useTranscription() {
 
             setStatus('uploading');
 
-            const response = await fetch('/api/transcribe', {
+            const response = await fetch('/api/transcription', {
                 method: 'POST',
                 body: formData
             });
@@ -28,7 +28,8 @@ export default function useTranscription() {
             if (!response.ok) {
                 const data = await response.json();
 
-                throw new Error(data.error || 'Error transcription');
+                setError(data.error || 'Error transcription');
+                setStatus('error');
             }
 
             setStatus('transcribing');
