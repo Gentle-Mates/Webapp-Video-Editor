@@ -1,6 +1,14 @@
+import { auth } from '@/lib/auth';
+
 const apiKey = process.env.MISTRAL_API_KEY;
 
 async function POST(request: Request) {
+    const session = await auth();
+
+    if (!session) {
+        return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     if (!apiKey) {
         return Response.json({ error: 'Missing MISTRAL_API_KEY value' }, { status: 500 });
     }
