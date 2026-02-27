@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useEffectEvent } from 'react';
+import { useState, useRef, useEffect, useEffectEvent, useMemo } from 'react';
 import { signOut } from 'next-auth/react';
 import type { DragEvent, ChangeEvent } from 'react';
 import type { SubtitleView, TranslationMode } from '@/utils/types';
@@ -22,7 +22,8 @@ export default function Home() {
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
     const [isDragging, setIsDragging] = useState(false);
-    const [showSubtitlesOverlay, setShowSubtitlesOverlay] = useState(true);
+    const [overlayTracks, setOverlayTracks] = useState<Record<SubtitleView, boolean>>({ original: true, mix: false, fr: false, en: false });
+    const [showOverlayMenu, setShowOverlayMenu] = useState(false);
     const [volume, setVolume] = useState(1);
 
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -43,6 +44,27 @@ export default function Home() {
     const displayedSubtitles =
         subtitleView === 'original' ? subtitles : translations[subtitleView].length > 0 ? translations[subtitleView] : subtitles;
     const activeSubtitle = displayedSubtitles.find(sub => currentTime >= sub.start && currentTime <= sub.end) ?? null;
+
+    function toggleOverlayTrack(track: SubtitleView) {
+        setOverlayTracks(prev => ({ ...prev, [track]: !prev[track] }));
+    }
+
+    const activeOverlayTracks = useMemo(() => {
+        return (Object.keys(overlayTracks) as SubtitleView[])
+            .filter(track => overlayTracks[track])
+            .map(track => {
+                const subs = track === 'original' ? subtitles : translations[track].length > 0 ? translations[track] : null;
+
+                if (!subs) {
+                    return null;
+                }
+
+                const active = subs.find(sub => currentTime >= sub.start && currentTime <= sub.end);
+
+                return active ? { track, text: active.text } : null;
+            })
+            .filter((s): s is { track: SubtitleView; text: string } => s !== null);
+    }, [overlayTracks, subtitles, translations, currentTime]);
 
     function startEditing(sub: { id: number; text: string; start: number; end: number }) {
         setEditingId(sub.id);
@@ -474,11 +496,18 @@ export default function Home() {
                                     onClick={togglePlay}
                                 />
 
-                                {showSubtitlesOverlay && activeSubtitle && (
-                                    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 max-w-[80%]">
-                                        <p className="rounded-lg bg-black/70 px-4 py-2 text-center text-sm font-medium text-white backdrop-blur-sm">
-                                            {activeSubtitle.text}
-                                        </p>
+                                {activeOverlayTracks.length > 0 && (
+                                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 max-w-[80%] flex flex-col items-center gap-1">
+                                        {activeOverlayTracks.map(({ track, text }) => (
+                                            <p
+                                                key={track}
+                                                className={`rounded-lg px-4 py-2 text-center text-sm font-medium backdrop-blur-sm ${
+                                                    activeOverlayTracks.length > 1 ? 'bg-black/60 text-white/80' : 'bg-black/70 text-white'
+                                                }`}
+                                            >
+                                                {text}
+                                            </p>
+                                        ))}
                                     </div>
                                 )}
                             </div>
@@ -669,34 +698,94 @@ export default function Home() {
                                         </button>
                                     </div>
 
-                                    {/* Right: Subtitles */}
+                                    {/* Right: Subtitle overlay */}
                                     <div
                                         className="flex items-center justify-end"
                                         style={{ width: '148px' }}
                                     >
-                                        <button
-                                            onClick={() => setShowSubtitlesOverlay(v => !v)}
-                                            className={`flex h-10 w-10 items-center justify-center rounded-full transition-all ${
-                                                showSubtitlesOverlay
-                                                    ? 'bg-violet-500/10 text-secondary'
-                                                    : 'bg-white/5 text-white/30 hover:bg-white/10 hover:text-white/60'
-                                            }`}
-                                            title="Afficher les sous-titres"
-                                        >
-                                            <svg
-                                                className="h-4 w-4"
-                                                fill="none"
-                                                viewBox="0 0 24 24"
-                                                stroke="currentColor"
-                                                strokeWidth={2}
+                                        <div className="relative">
+                                            <button
+                                                onClick={() => subtitles.length > 0 && setShowOverlayMenu(v => !v)}
+                                                className={`flex h-10 w-10 items-center justify-center rounded-full transition-all ${
+                                                    subtitles.length === 0
+                                                        ? 'bg-white/5 text-white/10 cursor-not-allowed'
+                                                        : Object.values(overlayTracks).some(Boolean)
+                                                          ? 'bg-violet-500/10 text-secondary'
+                                                          : 'bg-white/5 text-white/30 hover:bg-white/10 hover:text-white/60'
+                                                }`}
+                                                title="Sous-titres sur la vidéo"
                                             >
-                                                <path
-                                                    strokeLinecap="round"
-                                                    strokeLinejoin="round"
-                                                    d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z"
-                                                />
-                                            </svg>
-                                        </button>
+                                                <svg
+                                                    className="h-4 w-4"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    stroke="currentColor"
+                                                    strokeWidth={2}
+                                                >
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z"
+                                                    />
+                                                </svg>
+                                            </button>
+
+                                            {showOverlayMenu && (
+                                                <>
+                                                    <div
+                                                        className="fixed inset-0 z-10"
+                                                        onPointerDown={() => setShowOverlayMenu(false)}
+                                                    />
+                                                    <div className="absolute bottom-full right-0 z-20 mb-2 min-w-[140px] rounded-xl border border-white/10 bg-[#141416] p-1.5 shadow-xl">
+                                                        {(['original', 'mix', 'fr', 'en'] as const).map(track => {
+                                                            const available =
+                                                                track === 'original' ? subtitles.length > 0 : translations[track].length > 0;
+
+                                                            if (!available) {
+                                                                return null;
+                                                            }
+
+                                                            const active = overlayTracks[track];
+                                                            const label =
+                                                                track === 'original' ? 'Original' : track === 'mix' ? 'Mix' : track.toUpperCase();
+
+                                                            return (
+                                                                <button
+                                                                    key={track}
+                                                                    onClick={() => toggleOverlayTrack(track)}
+                                                                    className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium transition-all hover:bg-white/5 ${
+                                                                        active ? 'text-secondary' : 'text-white/50 hover:text-white/80'
+                                                                    }`}
+                                                                >
+                                                                    <span
+                                                                        className={`flex h-4 w-4 items-center justify-center rounded border transition-all ${
+                                                                            active ? 'border-secondary bg-secondary/20' : 'border-white/20'
+                                                                        }`}
+                                                                    >
+                                                                        {active && (
+                                                                            <svg
+                                                                                className="h-2.5 w-2.5"
+                                                                                fill="none"
+                                                                                viewBox="0 0 24 24"
+                                                                                stroke="currentColor"
+                                                                                strokeWidth={3}
+                                                                            >
+                                                                                <path
+                                                                                    strokeLinecap="round"
+                                                                                    strokeLinejoin="round"
+                                                                                    d="M4.5 12.75l6 6 9-13.5"
+                                                                                />
+                                                                            </svg>
+                                                                        )}
+                                                                    </span>
+                                                                    {label}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
 
