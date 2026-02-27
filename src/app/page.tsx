@@ -384,12 +384,11 @@ export default function Home() {
                     <div className="flex flex-1 overflow-hidden">
                         {/* Video */}
                         <div className="flex flex-1 flex-col overflow-hidden min-w-0">
-                            <div className="relative flex flex-1 items-center justify-center bg-black/50 p-3 min-h-0">
+                            <div className="relative flex flex-1 items-center justify-center bg-black min-h-0">
                                 <video
                                     ref={videoRef}
                                     src={videoSrc}
-                                    className="max-h-full max-w-full rounded-lg object-contain"
-                                    style={{ maxHeight: 'calc(100vh - 220px)' }}
+                                    className="h-full w-full object-contain"
                                     onClick={togglePlay}
                                 />
 
