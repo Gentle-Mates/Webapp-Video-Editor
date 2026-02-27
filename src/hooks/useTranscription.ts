@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { extractAudioFromVideo } from '@/utils/extractAudio';
+import { extractAudioFromVideo } from '@/utils/audio';
 import type { Subtitle, TranscriptionStatus } from '@/utils/types';
 
 export default function useTranscription() {

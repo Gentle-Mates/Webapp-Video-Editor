@@ -1,4 +1,4 @@
-import type { Subtitle } from './types';
+import type { Subtitle } from '@/utils/types';
 
 function formatSRTTime(seconds: number): string {
     const hrs = Math.floor(seconds / 3600);
