@@ -30,6 +30,8 @@ export default function useTranscription() {
 
                 setError(data.error || 'Error transcription');
                 setStatus('error');
+
+                return;
             }
 
             setStatus('transcribing');
@@ -51,11 +53,15 @@ export default function useTranscription() {
         }
     }
 
+    function updateSubtitle(id: number, patch: Partial<Pick<Subtitle, 'text' | 'start' | 'end'>>) {
+        setSubtitles(prev => prev.map(sub => (sub.id === id ? { ...sub, ...patch } : sub)));
+    }
+
     function reset() {
         setStatus('idle');
         setSubtitles([]);
         setError(null);
     }
 
-    return { status, subtitles, error, transcribe, reset };
+    return { status, subtitles, error, transcribe, reset, updateSubtitle };
 }
