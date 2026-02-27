@@ -6,3 +6,7 @@ export interface Subtitle {
 }
 
 export type TranscriptionStatus = 'idle' | 'extracting' | 'uploading' | 'transcribing' | 'done' | 'error';
+
+export type TranslationMode = 'mix' | 'fr' | 'en';
+
+export type SubtitleView = 'original' | TranslationMode;
