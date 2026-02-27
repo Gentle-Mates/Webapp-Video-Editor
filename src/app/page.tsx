@@ -1,14 +1,18 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useEffectEvent } from 'react';
 import { signOut } from 'next-auth/react';
 import type { DragEvent, ChangeEvent } from 'react';
+import type { SubtitleView, TranslationMode } from '@/utils/types';
+
+import Image from 'next/image';
 
 import { generateSRT, downloadSRT } from '@/utils/srt';
 import { formatTime, parseTime } from '@/utils/time';
 
 import ScrubInput from '@/components/ScrubInput';
 import useTranscription from '@/hooks/useTranscription';
+import useTranslation from '@/hooks/useTranslation';
 
 export default function Home() {
     const [videoSrc, setVideoSrc] = useState<string | null>(null);
@@ -26,12 +30,17 @@ export default function Home() {
     const editContainerRef = useRef<HTMLDivElement>(null);
 
     const { status, subtitles, error, transcribe, reset, updateSubtitle } = useTranscription();
+    const { translations, isTranslating, translate, syncTimings, updateTranslatedSubtitle, resetTranslations } = useTranslation();
+
     const [editingId, setEditingId] = useState<number | null>(null);
     const [editText, setEditText] = useState('');
     const [editStart, setEditStart] = useState('');
     const [editEnd, setEditEnd] = useState('');
+    const [subtitleView, setSubtitleView] = useState<SubtitleView>('original');
 
-    const activeSubtitle = subtitles.find(sub => currentTime >= sub.start && currentTime <= sub.end) ?? null;
+    const displayedSubtitles =
+        subtitleView === 'original' ? subtitles : translations[subtitleView].length > 0 ? translations[subtitleView] : subtitles;
+    const activeSubtitle = displayedSubtitles.find(sub => currentTime >= sub.start && currentTime <= sub.end) ?? null;
 
     function startEditing(sub: { id: number; text: string; start: number; end: number }) {
         setEditingId(sub.id);
@@ -47,15 +56,22 @@ export default function Home() {
 
         const start = parseTime(editStart);
         const end = parseTime(editEnd);
+        const timingUpdates = { ...(start ? { start } : {}), ...(end ? { end } : {}) };
 
-        updateSubtitle(editingId, {
-            text: editText,
-            ...(start ? { start } : {}),
-            ...(end ? { end } : {})
-        });
+        if (subtitleView === 'original') {
+            updateSubtitle(editingId, { text: editText, ...timingUpdates });
+        } else {
+            updateSubtitle(editingId, timingUpdates);
+            updateTranslatedSubtitle(subtitleView, editingId, { text: editText, ...timingUpdates });
+        }
 
+        syncTimings(editingId, timingUpdates);
         setEditingId(null);
     }
+
+    const onSaveEdit = useEffectEvent(() => {
+        saveEdit();
+    });
 
     function cancelEdit() {
         setEditingId(null);
@@ -72,6 +88,8 @@ export default function Home() {
             setVideoName(file.name);
             setIsPlaying(false);
             setCurrentTime(0);
+            resetTranslations();
+            setSubtitleView('original');
             reset();
         }
     }
@@ -152,16 +170,35 @@ export default function Home() {
 
     function handleTranscribe() {
         if (videoFile) {
+            resetTranslations();
+            setSubtitleView('original');
             transcribe(videoFile).then(() => {});
         }
     }
 
     function handleExportSRT() {
-        if (subtitles.length === 0) {
+        if (displayedSubtitles.length === 0) {
             return;
         }
 
-        downloadSRT(generateSRT(subtitles), videoName);
+        downloadSRT(
+            generateSRT(displayedSubtitles),
+            `${videoName.replace(/\.[^.]+$/, '')}${subtitleView !== 'original' ? ` - ${subtitleView.toUpperCase()}` : ''}.srt`
+        );
+    }
+
+    async function handleTranslate(mode: TranslationMode, forceRefresh = false) {
+        setSubtitleView(mode);
+
+        await translate(subtitles, mode, forceRefresh);
+    }
+
+    function handleReload() {
+        if (subtitleView === 'original') {
+            handleTranscribe();
+        } else {
+            handleTranslate(subtitleView, true).then(() => null);
+        }
     }
 
     useEffect(() => {
@@ -255,28 +292,15 @@ export default function Home() {
         }
 
         function handleClickOutside(e: MouseEvent) {
-            if (!editingId) {
-                return;
-            }
-
             if (editContainerRef.current && !editContainerRef.current.contains(e.target as Node)) {
-                const start = parseTime(editStart);
-                const end = parseTime(editEnd);
-
-                updateSubtitle(editingId, {
-                    text: editText,
-                    ...(start ? { start } : {}),
-                    ...(end ? { end } : {})
-                });
-
-                setEditingId(null);
+                onSaveEdit();
             }
         }
 
         document.addEventListener('mousedown', handleClickOutside);
 
         return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [editingId, editText, editStart, editEnd, updateSubtitle]);
+    }, [editingId]);
 
     useEffect(() => {
         if (!activeSubtitle || !subtitleListRef.current) {
@@ -575,28 +599,149 @@ export default function Home() {
                                                 </svg>
                                             </button>
                                             <button
-                                                onClick={handleTranscribe}
-                                                className="flex items-center gap-1.5 rounded-md bg-white/5 px-2.5 py-1.5 text-[10px] font-medium text-white/60 transition-all hover:bg-white/10 hover:text-white"
-                                                title="Regénérer les sous-titres"
+                                                onClick={handleReload}
+                                                disabled={isTranslating}
+                                                className="flex items-center gap-1.5 rounded-md bg-white/5 px-2.5 py-1.5 text-[10px] font-medium text-white/60 transition-all hover:bg-white/10 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed"
+                                                title={subtitleView === 'original' ? 'Regénérer les sous-titres' : 'Retraduire'}
                                             >
-                                                <svg
-                                                    className="h-4 w-4"
-                                                    fill="none"
-                                                    viewBox="0 0 24 24"
-                                                    stroke="currentColor"
-                                                    strokeWidth={2}
-                                                >
-                                                    <path
-                                                        strokeLinecap="round"
-                                                        strokeLinejoin="round"
-                                                        d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182"
-                                                    />
-                                                </svg>
+                                                {isTranslating ? (
+                                                    <svg
+                                                        className="h-4 w-4 animate-spin"
+                                                        fill="none"
+                                                        viewBox="0 0 24 24"
+                                                    >
+                                                        <circle
+                                                            className="opacity-25"
+                                                            cx="12"
+                                                            cy="12"
+                                                            r="10"
+                                                            stroke="currentColor"
+                                                            strokeWidth="4"
+                                                        />
+                                                        <path
+                                                            className="opacity-75"
+                                                            fill="currentColor"
+                                                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                                                        />
+                                                    </svg>
+                                                ) : (
+                                                    <svg
+                                                        className="h-4 w-4"
+                                                        fill="none"
+                                                        viewBox="0 0 24 24"
+                                                        stroke="currentColor"
+                                                        strokeWidth={2}
+                                                    >
+                                                        <path
+                                                            strokeLinecap="round"
+                                                            strokeLinejoin="round"
+                                                            d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182"
+                                                        />
+                                                    </svg>
+                                                )}
                                             </button>
                                         </>
                                     )}
                                 </div>
                             </div>
+
+                            {/* View tabs */}
+                            {status === 'done' && subtitles.length > 0 && (
+                                <div className="flex border-b border-white/5">
+                                    {/* Original */}
+                                    <button
+                                        onClick={() => setSubtitleView('original')}
+                                        className={`flex flex-1 items-center justify-center gap-1.5 py-2 text-[10px] font-medium transition-all ${
+                                            subtitleView === 'original'
+                                                ? 'text-white bg-white/5'
+                                                : 'text-white/40 hover:text-white/60 hover:bg-white/[0.02]'
+                                        }`}
+                                        title="Original"
+                                    >
+                                        <svg
+                                            className="h-3.5 w-3.5"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                            strokeWidth={2}
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
+                                            />
+                                        </svg>
+                                    </button>
+
+                                    {/* Mix */}
+                                    <button
+                                        onClick={() => handleTranslate('mix')}
+                                        disabled={isTranslating}
+                                        className={`flex flex-1 items-center justify-center gap-1.5 py-2 text-[10px] font-medium transition-all disabled:opacity-40 ${
+                                            subtitleView === 'mix'
+                                                ? 'text-white bg-white/5'
+                                                : 'text-white/40 hover:text-white/60 hover:bg-white/[0.02]'
+                                        }`}
+                                        title="Mix (FR↔EN)"
+                                    >
+                                        <svg
+                                            className="h-3.5 w-3.5"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                            strokeWidth={2}
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5"
+                                            />
+                                        </svg>
+                                    </button>
+
+                                    {/* FR */}
+                                    <button
+                                        onClick={() => handleTranslate('fr')}
+                                        disabled={isTranslating}
+                                        className={`flex flex-1 items-center justify-center py-2 text-[10px] font-bold transition-all disabled:opacity-40 ${
+                                            subtitleView === 'fr'
+                                                ? 'text-white bg-white/5'
+                                                : 'text-white/40 hover:text-white/60 hover:bg-white/[0.02]'
+                                        }`}
+                                        title="Français"
+                                    >
+                                        <Image
+                                            src="/flags/FR.svg"
+                                            alt="FR"
+                                            width={21}
+                                            height={14}
+                                            className="h-3 w-auto"
+                                            unoptimized
+                                        />
+                                    </button>
+
+                                    {/* EN */}
+                                    <button
+                                        onClick={() => handleTranslate('en')}
+                                        disabled={isTranslating}
+                                        className={`flex flex-1 items-center justify-center py-2 text-[10px] font-bold transition-all disabled:opacity-40 ${
+                                            subtitleView === 'en'
+                                                ? 'text-white bg-white/5'
+                                                : 'text-white/40 hover:text-white/60 hover:bg-white/[0.02]'
+                                        }`}
+                                        title="English"
+                                    >
+                                        <Image
+                                            src="/flags/US.svg"
+                                            alt="EN"
+                                            width={21}
+                                            height={14}
+                                            className="h-3 w-auto"
+                                            unoptimized
+                                        />
+                                    </button>
+                                </div>
+                            )}
 
                             {/* Processing state */}
                             {isProcessing && (
@@ -627,7 +772,7 @@ export default function Home() {
                                 </div>
                             )}
 
-                            {/* Error */}
+                            {/* Error state */}
                             {status === 'error' && (
                                 <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6">
                                     <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-500/10">
@@ -696,13 +841,42 @@ export default function Home() {
                                 </div>
                             )}
 
+                            {/* Translating state */}
+                            {isTranslating && subtitleView !== 'original' && (
+                                <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6">
+                                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+                                        <svg
+                                            className="h-6 w-6 animate-spin text-primary"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            shapeRendering="geometricPrecision"
+                                        >
+                                            <circle
+                                                className="opacity-25"
+                                                cx="12"
+                                                cy="12"
+                                                r="10"
+                                                stroke="currentColor"
+                                                strokeWidth="4"
+                                            />
+                                            <path
+                                                className="opacity-75"
+                                                fill="currentColor"
+                                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                                            />
+                                        </svg>
+                                    </div>
+                                    <p className="text-sm font-medium text-white/80">Traduction...</p>
+                                </div>
+                            )}
+
                             {/* Subtitles list */}
-                            {status === 'done' && subtitles.length > 0 && (
+                            {status === 'done' && !isTranslating && displayedSubtitles.length > 0 && (
                                 <div
                                     ref={subtitleListRef}
                                     className="flex-1 overflow-y-auto scrollbar-dark"
                                 >
-                                    {subtitles.map(sub =>
+                                    {displayedSubtitles.map(sub =>
                                         editingId === sub.id ? (
                                             <div
                                                 ref={editContainerRef}
