@@ -30,7 +30,7 @@ export default function useTranslation() {
                 return false;
             }
 
-            const data = await response.json();
+            const data: Subtitle[] = await response.json();
 
             setTranslations(prev => ({ ...prev, [mode]: data }));
 
