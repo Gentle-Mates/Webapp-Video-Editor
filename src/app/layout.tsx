@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-    title: 'Subtitles Editor',
-    description: 'Éditeur de sous-titres vidéo'
+    title: 'Video Editor',
+    description: 'Éditeur de vidéo'
 };
 
 export default function RootLayout({

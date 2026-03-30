@@ -20,7 +20,7 @@ export default function LoginPage() {
                             />
                         </svg>
                     </div>
-                    <h1 className="text-xl font-semibold text-white/90">Subtitles Editor</h1>
+                    <h1 className="text-xl font-semibold text-white/90">Video Editor</h1>
                 </div>
 
                 <form

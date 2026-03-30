@@ -417,7 +417,7 @@ export default function Home() {
                             />
                         </svg>
                     </div>
-                    <span className="text-sm font-medium text-white/90">Subtitles Editor</span>
+                    <span className="text-sm font-medium text-white/90">Video Editor</span>
                 </div>
                 {videoName ? <span className="text-sm text-white/90 truncate text-center">{videoName}</span> : <div />}
                 <div className="flex items-center justify-end gap-3">
