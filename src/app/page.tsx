@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useEffectEvent, useMemo } from 'react';
 import { signOut } from 'next-auth/react';
 import type { DragEvent, ChangeEvent } from 'react';
-import type { SubtitleView, TranslationMode } from '@/utils/types';
+import type { Subtitle, SubtitleView, TranslationMode } from '@/utils/types';
 
 import Image from 'next/image';
 
@@ -11,6 +11,7 @@ import { generateSRT, downloadSRT } from '@/utils/srt';
 import { formatTime, parseTime } from '@/utils/time';
 
 import ScrubInput from '@/components/ScrubInput';
+import SubtitleTimeline from '@/components/SubtitleTimeline';
 import useTranscription from '@/hooks/useTranscription';
 import useTranslation from '@/hooks/useTranslation';
 
@@ -24,6 +25,7 @@ export default function Home() {
     const [isDragging, setIsDragging] = useState(false);
     const [overlayTracks, setOverlayTracks] = useState<Record<SubtitleView, boolean>>({ original: true, mix: false, fr: false, en: false });
     const [showOverlayMenu, setShowOverlayMenu] = useState(false);
+    const [showTimeline, setShowTimeline] = useState(true);
     const [volume, setVolume] = useState(1);
 
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -133,6 +135,16 @@ export default function Home() {
         setSubtitleView('original');
         resetTranslations();
         reset();
+    }
+
+    function handleTimelineSubtitleUpdate(id: number, patch: Partial<Pick<Subtitle, 'start' | 'end'>>) {
+        updateSubtitle(id, patch);
+
+        if (subtitleView !== 'original') {
+            updateTranslatedSubtitle(subtitleView, id, patch);
+        }
+
+        syncTimings(id, patch);
     }
 
     function handleDrop(e: DragEvent) {
@@ -728,11 +740,30 @@ export default function Home() {
                                         </button>
                                     </div>
 
-                                    {/* Right: Subtitle overlay */}
+                                    {/* Right: Timeline toggle + Subtitle overlay */}
                                     <div
-                                        className="flex items-center justify-end"
+                                        className="flex items-center justify-end gap-2"
                                         style={{ width: '148px' }}
                                     >
+                                        {/* Timeline toggle */}
+                                        <button
+                                            onClick={() => setShowTimeline(v => !v)}
+                                            className={`flex h-10 w-10 items-center justify-center rounded-full transition-all ${
+                                                subtitles.length === 0
+                                                    ? 'bg-white/5 text-white/10 cursor-not-allowed'
+                                                    : showTimeline
+                                                      ? 'bg-violet-500/10 text-secondary'
+                                                      : 'bg-white/5 text-white/30 hover:bg-white/10 hover:text-white/60'
+                                            }`}
+                                            disabled={subtitles.length === 0}
+                                            title={showTimeline ? 'Masquer la timeline' : 'Afficher la timeline'}
+                                        >
+                                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 0 1-1.125-1.125M3.375 19.5h1.5C5.496 19.5 6 18.996 6 18.375m-2.625 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-1.5A1.125 1.125 0 0 1 18 18.375M20.625 4.5H3.375m17.25 0c.621 0 1.125.504 1.125 1.125M20.625 4.5h-1.5C18.504 4.5 18 5.004 18 5.625m3.75 0v1.5c0 .621-.504 1.125-1.125 1.125M3.375 4.5c-.621 0-1.125.504-1.125 1.125M3.375 4.5h1.5C5.496 4.5 6 5.004 6 5.625m-2.625 0v1.5c0 .621.504 1.125 1.125 1.125m0 0h1.5m-1.5 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m1.5-3.75C5.496 8.25 6 7.746 6 7.125v-1.5M4.875 8.25C5.496 8.25 6 8.754 6 9.375v1.5c0 .621-.504 1.125-1.125 1.125m1.5 0h12m-12 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m12-3.75c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-1.5m1.5 0c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m0-3.75h-12" />
+                                            </svg>
+                                        </button>
+
+                                        {/* Subtitle overlay */}
                                         <div className="relative">
                                             <button
                                                 onClick={() => subtitles.length > 0 && setShowOverlayMenu(v => !v)}
@@ -818,6 +849,21 @@ export default function Home() {
                                         </div>
                                     </div>
                                 </div>
+
+                                {/* Subtitle Timeline */}
+                                {showTimeline && status === 'done' && displayedSubtitles.length > 0 && (
+                                    <div className="mt-4 rounded-lg border border-white/5 bg-white/[0.02]">
+                                        <SubtitleTimeline
+                                            subtitles={displayedSubtitles}
+                                            duration={duration}
+                                            currentTime={currentTime}
+                                            activeSubtitleId={activeSubtitle?.id ?? null}
+                                            onSeek={seekTo}
+                                            onSubtitleUpdate={handleTimelineSubtitleUpdate}
+                                            onSubtitleTextEdit={startEditing}
+                                        />
+                                    </div>
+                                )}
 
                                 {/* Keyboard shortcuts hint */}
                                 <div className="mt-4 flex justify-center gap-6 text-[10px] text-white/20">
