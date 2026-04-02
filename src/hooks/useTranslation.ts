@@ -121,5 +121,15 @@ export default function useTranslation() {
         setTranslations({ mix: [], fr: [], en: [] });
     }
 
-    return { translations, isTranslating, translate, syncTimings, updateTranslatedSubtitle, addTranslatedSubtitle, deleteTranslatedSubtitle, restoreTranslatedSubtitles, resetTranslations };
+    return {
+        translations,
+        isTranslating,
+        translate,
+        syncTimings,
+        updateTranslatedSubtitle,
+        addTranslatedSubtitle,
+        deleteTranslatedSubtitle,
+        restoreTranslatedSubtitles,
+        resetTranslations
+    };
 }

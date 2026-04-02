@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useEffectEvent, useMemo } from 'react';
 import { signOut } from 'next-auth/react';
-import type { DragEvent, ChangeEvent } from 'react';
+import type { ReactNode, DragEvent, ChangeEvent } from 'react';
 import type { Subtitle, SubtitleView, TranslationMode, SubtitleTrack } from '@/utils/types';
 
 import Image from 'next/image';
@@ -15,7 +15,7 @@ import SubtitleTimeline from '@/components/SubtitleTimeline';
 import useTranscription from '@/hooks/useTranscription';
 import useTranslation from '@/hooks/useTranslation';
 
-const ALL_TRACKS: Record<SubtitleView, { label: string; suffix: string; icon: React.ReactNode }> = {
+const ALL_TRACKS: Record<SubtitleView, { label: string; suffix: string; icon: ReactNode }> = {
     original: {
         label: 'Original',
         suffix: '',
@@ -124,17 +124,7 @@ export default function Home() {
     const subtitleElRefs = useRef<Map<number, HTMLElement>>(new Map());
     const exportMenuRef = useRef<HTMLDivElement>(null);
 
-    const {
-        status,
-        subtitles,
-        error,
-        transcribe,
-        reset,
-        updateSubtitle,
-        addSubtitle,
-        deleteSubtitle,
-        restoreSubtitle
-    } = useTranscription();
+    const { status, subtitles, error, transcribe, reset, updateSubtitle, addSubtitle, deleteSubtitle, restoreSubtitle } = useTranscription();
     const {
         translations,
         isTranslating,
@@ -153,10 +143,12 @@ export default function Home() {
     const [editEnd, setEditEnd] = useState('');
     const [subtitleView, setSubtitleView] = useState<SubtitleView>('original');
 
-    const [undoStack, setUndoStack] = useState<{
-        original: Subtitle;
-        translations: Partial<Record<TranslationMode, Subtitle>>;
-    }[]>([]);
+    const [undoStack, setUndoStack] = useState<
+        {
+            original: Subtitle;
+            translations: Partial<Record<TranslationMode, Subtitle>>;
+        }[]
+    >([]);
 
     const tracks = (Object.keys(ALL_TRACKS) as SubtitleView[]).filter(track =>
         track === 'original' ? subtitles.length > 0 : translations[track].length > 0
@@ -304,7 +296,7 @@ export default function Home() {
         reset();
     }
 
-    const removeSubtitle = useEffectEvent((id: number) => {
+    function removeSubtitle(id: number) {
         const original = subtitles.find(s => s.id === id);
 
         if (original) {
@@ -327,7 +319,7 @@ export default function Home() {
         if (editingId === id) {
             setEditingId(null);
         }
-    });
+    }
 
     function addNewSubtitle(start: number, end: number) {
         addSubtitle(start, end, '');
@@ -378,7 +370,7 @@ export default function Home() {
         if (isPlaying) {
             videoRef.current.pause();
         } else {
-            videoRef.current.play();
+            videoRef.current.play().then(() => null);
         }
 
         setIsPlaying(!isPlaying);
@@ -558,11 +550,7 @@ export default function Home() {
             return;
         }
 
-        if (
-            (e.code === 'ArrowUp' || e.code === 'ArrowDown') &&
-            !isEditing &&
-            displayedSubtitles.length > 0
-        ) {
+        if ((e.code === 'ArrowUp' || e.code === 'ArrowDown') && !isEditing && displayedSubtitles.length > 0) {
             e.preventDefault();
 
             const currentIndex = editingId
@@ -603,7 +591,7 @@ export default function Home() {
                 e.preventDefault();
 
                 if (videoRef.current.paused) {
-                    videoRef.current.play();
+                    videoRef.current.play().then(() => null);
 
                     setIsPlaying(true);
                 } else {
@@ -748,7 +736,7 @@ export default function Home() {
                     >
                         <div
                             onClick={() => fileInputRef.current?.click()}
-                            className="flex flex-col items-center justify-center gap-5 rounded-2xl border border-white/10 bg-white/[0.02] p-14 backdrop-blur-sm transition-all hover:border-primary/50 hover:bg-white/[0.04] cursor-pointer"
+                            className="flex flex-col items-center justify-center gap-5 rounded-2xl border border-white/10 bg-white/2 p-14 backdrop-blur-sm transition-all hover:border-primary/50 hover:bg-white/4 cursor-pointer"
                         >
                             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 ring-1 ring-white/10">
                                 <svg
@@ -797,7 +785,9 @@ export default function Home() {
                                             <div
                                                 key={track}
                                                 className="flex items-center gap-2 rounded-lg bg-black/70 px-4 py-2 text-center text-sm font-medium text-white backdrop-blur-sm"
-                                            >                                                {activeOverlayTracks.length > 1 && (
+                                            >
+                                                {' '}
+                                                {activeOverlayTracks.length > 1 && (
                                                     <div className="shrink-0 flex items-center justify-center text-white/60">
                                                         {ALL_TRACKS[track].icon}
                                                     </div>
@@ -807,7 +797,7 @@ export default function Home() {
                                         ))}
                                     </div>
                                 )}
-                                </div>
+                            </div>
                             {/* Controls panel */}
                             <div className="shrink-0 border-t border-white/5 bg-[#0c0c0e] px-6 py-4">
                                 {/* Timeline */}
@@ -818,7 +808,7 @@ export default function Home() {
 
                                         {/* Progress */}
                                         <div
-                                            className="absolute h-1.5 rounded-full bg-gradient-to-r from-secondary to-primary"
+                                            className="absolute h-1.5 rounded-full bg-linear-to-r from-secondary to-primary"
                                             style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
                                         />
 
@@ -1238,7 +1228,7 @@ export default function Home() {
 
                                 {/* Subtitle Timeline */}
                                 {timelineTracksToDisplay.length > 0 && status === 'done' && (
-                                    <div className="mt-4 rounded-lg border border-white/5 bg-white/[0.02]">
+                                    <div className="mt-4 rounded-lg border border-white/5 bg-white/2">
                                         <SubtitleTimeline
                                             tracks={timelineTracksToDisplay}
                                             duration={duration}
@@ -1309,7 +1299,7 @@ export default function Home() {
                                                     </svg>
                                                 </button>
                                                 {showExportMenu && (
-                                                    <div className="absolute right-0 top-full z-20 mt-2 min-w-[160px] rounded-xl border border-white/10 bg-[#141416] p-1.5 shadow-xl">
+                                                    <div className="absolute right-0 top-full z-20 mt-2 min-w-40 rounded-xl border border-white/10 bg-[#141416] p-1.5 shadow-xl">
                                                         {tracks.map(track => {
                                                             const checked = exportSelection[track];
 
@@ -1412,7 +1402,7 @@ export default function Home() {
                                         className={`flex flex-1 items-center justify-center gap-1.5 py-2 text-[10px] font-medium transition-all ${
                                             subtitleView === 'original'
                                                 ? 'text-white bg-white/5'
-                                                : 'text-white/40 hover:text-white/60 hover:bg-white/[0.02]'
+                                                : 'text-white/40 hover:text-white/60 hover:bg-white/2'
                                         }`}
                                         title="Original"
                                     >
@@ -1436,9 +1426,7 @@ export default function Home() {
                                         onClick={() => handleTranslate('mix')}
                                         disabled={isTranslating}
                                         className={`flex flex-1 items-center justify-center gap-1.5 py-2 text-[10px] font-medium transition-all disabled:opacity-40 ${
-                                            subtitleView === 'mix'
-                                                ? 'text-white bg-white/5'
-                                                : 'text-white/40 hover:text-white/60 hover:bg-white/[0.02]'
+                                            subtitleView === 'mix' ? 'text-white bg-white/5' : 'text-white/40 hover:text-white/60 hover:bg-white/2'
                                         }`}
                                         title="Mix (FR↔EN)"
                                     >
@@ -1462,9 +1450,7 @@ export default function Home() {
                                         onClick={() => handleTranslate('fr')}
                                         disabled={isTranslating}
                                         className={`flex flex-1 items-center justify-center py-2 text-[10px] font-bold transition-all disabled:opacity-40 ${
-                                            subtitleView === 'fr'
-                                                ? 'text-white bg-white/5'
-                                                : 'text-white/40 hover:text-white/60 hover:bg-white/[0.02]'
+                                            subtitleView === 'fr' ? 'text-white bg-white/5' : 'text-white/40 hover:text-white/60 hover:bg-white/2'
                                         }`}
                                         title="Français"
                                     >
@@ -1483,9 +1469,7 @@ export default function Home() {
                                         onClick={() => handleTranslate('en')}
                                         disabled={isTranslating}
                                         className={`flex flex-1 items-center justify-center py-2 text-[10px] font-bold transition-all disabled:opacity-40 ${
-                                            subtitleView === 'en'
-                                                ? 'text-white bg-white/5'
-                                                : 'text-white/40 hover:text-white/60 hover:bg-white/[0.02]'
+                                            subtitleView === 'en' ? 'text-white bg-white/5' : 'text-white/40 hover:text-white/60 hover:bg-white/2'
                                         }`}
                                         title="English"
                                     >
@@ -1731,7 +1715,7 @@ export default function Home() {
                                                             }
                                                         }}
                                                         rows={1}
-                                                        className="w-full [field-sizing:content] resize-none rounded border-none bg-white/10 px-2 py-1 text-xs leading-relaxed text-white outline-none focus:ring-1 focus:ring-inset focus:ring-primary"
+                                                        className="w-full field-sizing-content resize-none rounded border-none bg-white/10 px-2 py-1 text-xs leading-relaxed text-white outline-none focus:ring-1 focus:ring-inset focus:ring-primary"
                                                     />
                                                 </div>
                                             ) : (

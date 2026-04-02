@@ -5,7 +5,7 @@ export default function LoginPage() {
         <div className="flex min-h-screen items-center justify-center bg-[#09090b]">
             <div className="flex flex-col items-center gap-8">
                 <div className="flex flex-col items-center gap-3">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-500">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-linear-to-br from-violet-500 to-fuchsia-500">
                         <svg
                             className="h-7 w-7 text-white"
                             fill="none"
