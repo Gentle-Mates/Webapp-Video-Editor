@@ -34,8 +34,9 @@ export default function Home() {
     const editContainerRef = useRef<HTMLDivElement>(null);
     const subtitleElRefs = useRef<Map<number, HTMLElement>>(new Map());
 
-    const { status, subtitles, error, transcribe, reset, updateSubtitle } = useTranscription();
-    const { translations, isTranslating, translate, syncTimings, updateTranslatedSubtitle, resetTranslations } = useTranslation();
+    const { status, subtitles, error, transcribe, reset, updateSubtitle, deleteSubtitle } = useTranscription();
+    const { translations, isTranslating, translate, syncTimings, updateTranslatedSubtitle, deleteTranslatedSubtitle, resetTranslations } =
+        useTranslation();
 
     const [editingId, setEditingId] = useState<number | null>(null);
     const [editText, setEditText] = useState('');
@@ -135,6 +136,15 @@ export default function Home() {
         setSubtitleView('original');
         resetTranslations();
         reset();
+    }
+
+    function removeSubtitle(id: number) {
+        deleteSubtitle(id);
+        deleteTranslatedSubtitle(id);
+
+        if (editingId === id) {
+            setEditingId(null);
+        }
     }
 
     function handleTimelineSubtitleUpdate(id: number, patch: Partial<Pick<Subtitle, 'start' | 'end'>>) {
@@ -456,12 +466,24 @@ export default function Home() {
                             className="flex shrink-0 items-center justify-center rounded-md p-1.5 text-white/50 transition-all hover:bg-red-500/15 hover:text-red-400"
                             title="Supprimer la vidéo"
                         >
-                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                            <svg
+                                className="h-4 w-4"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                                strokeWidth={2}
+                            >
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"
+                                />
                             </svg>
                         </button>
                     </div>
-                ) : <div />}
+                ) : (
+                    <div />
+                )}
                 <div className="flex items-center justify-end gap-3">
                     <button
                         onClick={() => signOut()}
@@ -758,8 +780,18 @@ export default function Home() {
                                             disabled={subtitles.length === 0}
                                             title={showTimeline ? 'Masquer la timeline' : 'Afficher la timeline'}
                                         >
-                                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 0 1-1.125-1.125M3.375 19.5h1.5C5.496 19.5 6 18.996 6 18.375m-2.625 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-1.5A1.125 1.125 0 0 1 18 18.375M20.625 4.5H3.375m17.25 0c.621 0 1.125.504 1.125 1.125M20.625 4.5h-1.5C18.504 4.5 18 5.004 18 5.625m3.75 0v1.5c0 .621-.504 1.125-1.125 1.125M3.375 4.5c-.621 0-1.125.504-1.125 1.125M3.375 4.5h1.5C5.496 4.5 6 5.004 6 5.625m-2.625 0v1.5c0 .621.504 1.125 1.125 1.125m0 0h1.5m-1.5 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m1.5-3.75C5.496 8.25 6 7.746 6 7.125v-1.5M4.875 8.25C5.496 8.25 6 8.754 6 9.375v1.5c0 .621-.504 1.125-1.125 1.125m1.5 0h12m-12 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m12-3.75c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-1.5m1.5 0c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m0-3.75h-12" />
+                                            <svg
+                                                className="h-4 w-4"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                                strokeWidth={2}
+                                            >
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 0 1-1.125-1.125M3.375 19.5h1.5C5.496 19.5 6 18.996 6 18.375m-2.625 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-1.5A1.125 1.125 0 0 1 18 18.375M20.625 4.5H3.375m17.25 0c.621 0 1.125.504 1.125 1.125M20.625 4.5h-1.5C18.504 4.5 18 5.004 18 5.625m3.75 0v1.5c0 .621-.504 1.125-1.125 1.125M3.375 4.5c-.621 0-1.125.504-1.125 1.125M3.375 4.5h1.5C5.496 4.5 6 5.004 6 5.625m-2.625 0v1.5c0 .621.504 1.125 1.125 1.125m0 0h1.5m-1.5 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m1.5-3.75C5.496 8.25 6 7.746 6 7.125v-1.5M4.875 8.25C5.496 8.25 6 8.754 6 9.375v1.5c0 .621-.504 1.125-1.125 1.125m1.5 0h12m-12 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m12-3.75c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-1.5m1.5 0c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m0-3.75h-12"
+                                                />
                                             </svg>
                                         </button>
 
@@ -861,6 +893,7 @@ export default function Home() {
                                             onSeek={seekTo}
                                             onSubtitleUpdate={handleTimelineSubtitleUpdate}
                                             onSubtitleTextEdit={startEditing}
+                                            onSubtitleDelete={removeSubtitle}
                                         />
                                     </div>
                                 )}
@@ -1213,12 +1246,32 @@ export default function Home() {
                                                             onCancel={cancelEdit}
                                                             onSetCurrent={() => setEditStart(formatTime(currentTime))}
                                                         />
-                                                        <button
-                                                            onClick={cancelEdit}
-                                                            className="h-6 ml-auto rounded bg-red-600 px-2.5 text-[10px] font-medium text-white transition-all hover:bg-red-500"
-                                                        >
-                                                            Annuler
-                                                        </button>
+                                                        <div className="ml-auto flex items-center gap-1.5">
+                                                            <button
+                                                                onClick={() => removeSubtitle(sub.id)}
+                                                                className="flex h-6 w-6 items-center justify-center rounded-md text-white/40 transition-all hover:bg-red-500/15 hover:text-red-400"
+                                                                title="Supprimer le sous-titre"
+                                                            >
+                                                                <svg
+                                                                    xmlns="http://www.w3.org/2000/svg"
+                                                                    viewBox="0 0 20 20"
+                                                                    fill="currentColor"
+                                                                    className="size-3.5"
+                                                                >
+                                                                    <path
+                                                                        fillRule="evenodd"
+                                                                        d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.519.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z"
+                                                                        clipRule="evenodd"
+                                                                    />
+                                                                </svg>
+                                                            </button>
+                                                            <button
+                                                                onClick={cancelEdit}
+                                                                className="h-6 rounded bg-red-600 px-2.5 text-[10px] font-medium text-white transition-all hover:bg-red-500"
+                                                            >
+                                                                Annuler
+                                                            </button>
+                                                        </div>
                                                     </div>
 
                                                     <ScrubInput

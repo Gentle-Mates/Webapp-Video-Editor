@@ -57,11 +57,15 @@ export default function useTranscription() {
         setSubtitles(prev => prev.map(sub => (sub.id === id ? { ...sub, ...patch } : sub)));
     }
 
+    function deleteSubtitle(id: number) {
+        setSubtitles(prev => prev.filter(sub => sub.id !== id));
+    }
+
     function reset() {
         setStatus('idle');
         setSubtitles([]);
         setError(null);
     }
 
-    return { status, subtitles, error, transcribe, reset, updateSubtitle };
+    return { status, subtitles, error, transcribe, reset, updateSubtitle, deleteSubtitle };
 }

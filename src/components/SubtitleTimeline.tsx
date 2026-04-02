@@ -110,6 +110,7 @@ interface SubtitleTimelineProps {
     onSeek: (time: number) => void;
     onSubtitleUpdate: (id: number, patch: Partial<Pick<Subtitle, 'start' | 'end'>>) => void;
     onSubtitleTextEdit: (sub: Subtitle) => void;
+    onSubtitleDelete?: (id: number) => void;
 }
 
 export default function SubtitleTimeline({
@@ -119,7 +120,8 @@ export default function SubtitleTimeline({
     activeSubtitleId,
     onSeek,
     onSubtitleUpdate,
-    onSubtitleTextEdit
+    onSubtitleTextEdit,
+    onSubtitleDelete
 }: SubtitleTimelineProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const ppsRef = useRef(80);
@@ -147,6 +149,31 @@ export default function SubtitleTimeline({
             setPixelsPerSecond(newPps);
         }
     }, [containerWidth, duration]);
+
+    useEffect(() => {
+        if (!onSubtitleDelete || !activeSubtitleId) {
+            return;
+        }
+
+        function handleKeyDown(e: KeyboardEvent) {
+            if (e.key !== 'Delete' && e.key !== 'Backspace') {
+                return;
+            }
+
+            const tag = (e.target as HTMLElement).tagName;
+
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement).isContentEditable) {
+                return;
+            }
+
+            e.preventDefault();
+            onSubtitleDelete!(activeSubtitleId!);
+        }
+
+        document.addEventListener('keydown', handleKeyDown);
+
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, [onSubtitleDelete, activeSubtitleId]);
 
     const totalWidth = duration * pixelsPerSecond + TIMELINE_PADDING;
     const sortedSubtitles = useMemo(() => [...subtitles].sort((a, b) => a.start - b.start), [subtitles]);
