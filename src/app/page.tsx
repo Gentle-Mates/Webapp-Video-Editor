@@ -15,6 +15,13 @@ import SubtitleTimeline from '@/components/SubtitleTimeline';
 import useTranscription from '@/hooks/useTranscription';
 import useTranslation from '@/hooks/useTranslation';
 
+const ALL_TRACKS: Record<SubtitleView, { label: string; suffix: string }> = {
+    original: { label: 'Original', suffix: '' },
+    mix: { label: 'Mix', suffix: ' - MIX' },
+    fr: { label: 'Français', suffix: ' - FR' },
+    en: { label: 'Anglais', suffix: ' - EN' }
+};
+
 export default function Home() {
     const [videoSrc, setVideoSrc] = useState<string | null>(null);
     const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -26,6 +33,13 @@ export default function Home() {
     const [overlayTracks, setOverlayTracks] = useState<Record<SubtitleView, boolean>>({ original: true, mix: false, fr: false, en: false });
     const [showOverlayMenu, setShowOverlayMenu] = useState(false);
     const [showTimeline, setShowTimeline] = useState(true);
+    const [showExportMenu, setShowExportMenu] = useState(false);
+    const [exportSelection, setExportSelection] = useState<Record<SubtitleView, boolean>>({
+        original: true,
+        mix: true,
+        fr: true,
+        en: true
+    });
     const [volume, setVolume] = useState(1);
 
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -33,6 +47,7 @@ export default function Home() {
     const subtitleListRef = useRef<HTMLDivElement>(null);
     const editContainerRef = useRef<HTMLDivElement>(null);
     const subtitleElRefs = useRef<Map<number, HTMLElement>>(new Map());
+    const exportMenuRef = useRef<HTMLDivElement>(null);
 
     const { status, subtitles, error, transcribe, reset, updateSubtitle, addSubtitle, deleteSubtitle } = useTranscription();
     const {
@@ -51,6 +66,11 @@ export default function Home() {
     const [editStart, setEditStart] = useState('');
     const [editEnd, setEditEnd] = useState('');
     const [subtitleView, setSubtitleView] = useState<SubtitleView>('original');
+
+    const tracks = (Object.keys(ALL_TRACKS) as SubtitleView[]).filter(track =>
+        track === 'original' ? subtitles.length > 0 : translations[track].length > 0
+    );
+    const selectedExportCount = tracks.filter(t => exportSelection[t]).length;
 
     const displayedSubtitles = useMemo(() => {
         const subs = subtitleView === 'original' ? subtitles : translations[subtitleView].length > 0 ? translations[subtitleView] : subtitles;
@@ -271,15 +291,34 @@ export default function Home() {
         }
     }
 
-    function handleExportSRT() {
-        if (displayedSubtitles.length === 0) {
+    useEffect(() => {
+        if (!showExportMenu) {
             return;
         }
 
-        downloadSRT(
-            generateSRT(displayedSubtitles),
-            `${videoName.replace(/\.[^.]+$/, '')}${subtitleView !== 'original' ? ` - ${subtitleView.toUpperCase()}` : ''}.srt`
-        );
+        function handleClick(e: MouseEvent) {
+            if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
+                setShowExportMenu(false);
+            }
+        }
+
+        document.addEventListener('mousedown', handleClick);
+
+        return () => document.removeEventListener('mousedown', handleClick);
+    }, [showExportMenu]);
+
+    function handleExportSRT() {
+        const baseName = videoName.replace(/\.[^.]+$/, '');
+
+        tracks
+            .filter(t => exportSelection[t])
+            .forEach(track => {
+                const content = generateSRT([...(track === 'original' ? subtitles : translations[track])].sort((a, b) => a.start - b.start));
+
+                downloadSRT(content, `${baseName}${ALL_TRACKS[track].suffix}.srt`);
+            });
+
+        setShowExportMenu(false);
     }
 
     async function handleTranslate(mode: TranslationMode, forceRefresh = false) {
@@ -850,17 +889,8 @@ export default function Home() {
                                                         onPointerDown={() => setShowOverlayMenu(false)}
                                                     />
                                                     <div className="absolute bottom-full right-0 z-20 mb-2 min-w-[140px] rounded-xl border border-white/10 bg-[#141416] p-1.5 shadow-xl">
-                                                        {(['original', 'mix', 'fr', 'en'] as const).map(track => {
-                                                            const available =
-                                                                track === 'original' ? subtitles.length > 0 : translations[track].length > 0;
-
-                                                            if (!available) {
-                                                                return null;
-                                                            }
-
+                                                        {tracks.map(track => {
                                                             const active = overlayTracks[track];
-                                                            const label =
-                                                                track === 'original' ? 'Original' : track === 'mix' ? 'Mix' : track.toUpperCase();
 
                                                             return (
                                                                 <button
@@ -891,7 +921,7 @@ export default function Home() {
                                                                             </svg>
                                                                         )}
                                                                     </span>
-                                                                    {label}
+                                                                    {ALL_TRACKS[track].label}
                                                                 </button>
                                                             );
                                                         })}
@@ -944,25 +974,77 @@ export default function Home() {
                                 <div className="flex items-center gap-2">
                                     {status === 'done' && subtitles.length > 0 && (
                                         <>
-                                            <button
-                                                onClick={handleExportSRT}
-                                                className="flex items-center gap-1.5 rounded-md bg-white/5 px-2.5 py-1.5 text-[10px] font-medium text-white/60 transition-all hover:bg-white/10 hover:text-white"
-                                                title="Exporter SRT"
+                                            <div
+                                                className="relative"
+                                                ref={exportMenuRef}
                                             >
-                                                <svg
-                                                    className="h-4 w-4"
-                                                    fill="none"
-                                                    viewBox="0 0 24 24"
-                                                    stroke="currentColor"
-                                                    strokeWidth={2}
+                                                <button
+                                                    onClick={() => setShowExportMenu(v => !v)}
+                                                    className="flex items-center gap-1.5 rounded-md bg-white/5 px-2.5 py-1.5 text-[10px] font-medium text-white/60 transition-all hover:bg-white/10 hover:text-white"
+                                                    title="Exporter SRT"
                                                 >
-                                                    <path
-                                                        strokeLinecap="round"
-                                                        strokeLinejoin="round"
-                                                        d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"
-                                                    />
-                                                </svg>
-                                            </button>
+                                                    <svg
+                                                        className="h-4 w-4"
+                                                        fill="none"
+                                                        viewBox="0 0 24 24"
+                                                        stroke="currentColor"
+                                                        strokeWidth={2}
+                                                    >
+                                                        <path
+                                                            strokeLinecap="round"
+                                                            strokeLinejoin="round"
+                                                            d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"
+                                                        />
+                                                    </svg>
+                                                </button>
+                                                {showExportMenu && (
+                                                    <div className="absolute right-0 top-full z-20 mt-2 min-w-[160px] rounded-xl border border-white/10 bg-[#141416] p-1.5 shadow-xl">
+                                                        {tracks.map(track => {
+                                                            const checked = exportSelection[track];
+
+                                                            return (
+                                                                <button
+                                                                    key={track}
+                                                                    onClick={() => setExportSelection(prev => ({ ...prev, [track]: !prev[track] }))}
+                                                                    className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-[11px] text-white/70 transition-all hover:bg-white/5"
+                                                                >
+                                                                    <div
+                                                                        className={`flex h-4 w-4 items-center justify-center rounded border transition-all ${
+                                                                            checked ? 'border-secondary bg-secondary/20' : 'border-white/20'
+                                                                        }`}
+                                                                    >
+                                                                        {checked && (
+                                                                            <svg
+                                                                                className="h-2.5 w-2.5 text-secondary"
+                                                                                fill="none"
+                                                                                viewBox="0 0 24 24"
+                                                                                stroke="currentColor"
+                                                                                strokeWidth={3}
+                                                                            >
+                                                                                <path
+                                                                                    strokeLinecap="round"
+                                                                                    strokeLinejoin="round"
+                                                                                    d="M4.5 12.75l6 6 9-13.5"
+                                                                                />
+                                                                            </svg>
+                                                                        )}
+                                                                    </div>
+                                                                    {ALL_TRACKS[track].label}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                        <div className="mt-1 pt-1">
+                                                            <button
+                                                                onClick={handleExportSRT}
+                                                                disabled={selectedExportCount === 0}
+                                                                className="flex w-full items-center justify-center rounded-lg bg-secondary/20 px-3 py-1.5 text-[11px] font-medium text-secondary transition-all hover:bg-secondary/30 disabled:opacity-40 disabled:cursor-not-allowed"
+                                                            >
+                                                                Télécharger ({selectedExportCount})
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
                                             <button
                                                 onClick={handleReload}
                                                 disabled={isTranslating}
