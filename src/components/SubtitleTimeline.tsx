@@ -2,7 +2,7 @@ import { useRef, useState, useEffect, useMemo, useCallback, memo, type MouseEven
 import { flushSync } from 'react-dom';
 
 import { formatTime } from '@/utils/time';
-import type { Subtitle } from '@/utils/types';
+import type { Subtitle, SubtitleTrack, SubtitleView } from '@/utils/types';
 
 type DragState = {
     subtitleId: number;
@@ -26,6 +26,7 @@ type LassoState = {
 
 const MIN_SUBTITLE_DURATION = 0.1;
 const TRACK_HEIGHT = 36;
+const TRACK_GAP = 4;
 const RULER_HEIGHT = 24;
 const TIMELINE_PADDING = 16;
 const TIMELINE_OFFSET = TIMELINE_PADDING / 2;
@@ -57,6 +58,8 @@ type ResizeEdge = 'left' | 'right';
 
 interface SubtitleBlockProps {
     sub: Subtitle;
+    trackId: SubtitleView;
+    trackIndex: number;
     pps: number;
     isActive: boolean;
     isSelected: boolean;
@@ -65,14 +68,15 @@ interface SubtitleBlockProps {
     hoveredEdge?: ResizeEdge;
     onDragStart: (e: MouseEvent, sub: Subtitle, edge: 'left' | 'right' | 'move') => void;
     onHover: (id: number, edge?: ResizeEdge) => void;
-    onEdit: (sub: Subtitle) => void;
+    onEdit: (trackId: SubtitleView, sub: Subtitle) => void;
 }
 
 const SubtitleBlock = memo(function SubtitleBlock(props: SubtitleBlockProps) {
-    const { sub, pps, isActive, isSelected, isDragging, draggingEdge, hoveredEdge, onDragStart, onHover, onEdit } = props;
+    const { sub, trackId, trackIndex, pps, isActive, isSelected, isDragging, draggingEdge, hoveredEdge, onDragStart, onHover, onEdit } = props;
 
     const left = sub.start * pps + TIMELINE_OFFSET;
     const width = (sub.end - sub.start) * pps;
+    const top = RULER_HEIGHT + 2 + trackIndex * (TRACK_HEIGHT + TRACK_GAP);
 
     return (
         <div
@@ -85,7 +89,7 @@ const SubtitleBlock = memo(function SubtitleBlock(props: SubtitleBlockProps) {
                         ? 'bg-violet-500/25 border-violet-400/40'
                         : 'bg-white/[0.07] border-white/10 hover:bg-white/12 hover:border-white/20'
             }`}
-            style={{ left: `${left}px`, width: `${Math.max(width, 4)}px`, top: RULER_HEIGHT + 2, height: TRACK_HEIGHT }}
+            style={{ left: `${left}px`, width: `${Math.max(width, 4)}px`, top, height: TRACK_HEIGHT }}
         >
             <div
                 className={`absolute left-0 top-0 bottom-0 w-1.5 cursor-ew-resize rounded-l-md ${
@@ -100,7 +104,7 @@ const SubtitleBlock = memo(function SubtitleBlock(props: SubtitleBlockProps) {
                 onMouseDown={e => onDragStart(e, sub, 'move')}
                 onDoubleClick={e => {
                     e.stopPropagation();
-                    onEdit(sub);
+                    onEdit(trackId, sub);
                 }}
             >
                 {width > 30 && <p className="truncate text-[10px] leading-none text-white/70">{sub.text}</p>}
@@ -125,19 +129,19 @@ interface ContextMenuState {
 }
 
 interface SubtitleTimelineProps {
-    subtitles: Subtitle[];
+    tracks: SubtitleTrack[];
     duration: number;
     currentTime: number;
     activeSubtitleId: number | null;
     onSeek: (time: number) => void;
     onSubtitleUpdate: (id: number, patch: Partial<Pick<Subtitle, 'start' | 'end'>>) => void;
-    onSubtitleTextEdit: (sub: Subtitle) => void;
+    onSubtitleTextEdit: (trackId: SubtitleView, sub: Subtitle) => void;
     onSubtitlesDelete?: (ids: number[]) => void;
     onSubtitleAdd?: (start: number, end: number) => void;
 }
 
 export default function SubtitleTimeline({
-    subtitles,
+    tracks,
     duration,
     currentTime,
     activeSubtitleId,
@@ -166,6 +170,8 @@ export default function SubtitleTimeline({
     const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
     const [lasso, setLasso] = useState<LassoState | null>(null);
+
+    const subtitles = useMemo(() => tracks.flatMap(t => t.subtitles), [tracks]);
 
     useEffect(() => {
         if (!contextMenu) {
@@ -583,13 +589,6 @@ export default function SubtitleTimeline({
         setHoveredEdge(edge ? { id, edge } : null);
     }, []);
 
-    const handleSubtitleEdit = useCallback(
-        (sub: Subtitle) => {
-            onSubtitleTextEdit(sub);
-        },
-        [onSubtitleTextEdit]
-    );
-
     const rulerTicks = useMemo(() => {
         if (!containerWidth) {
             return null;
@@ -759,7 +758,7 @@ export default function SubtitleTimeline({
             <div
                 ref={containerRef}
                 className="relative overflow-x-auto overflow-y-hidden scrollbar-dark"
-                style={{ height: RULER_HEIGHT + TRACK_HEIGHT + 20 }}
+                style={{ height: RULER_HEIGHT + tracks.length * TRACK_HEIGHT + Math.max(0, tracks.length - 1) * TRACK_GAP + 20 }}
                 onClick={handleTimelineClick}
                 onContextMenu={handleContextMenu}
             >
@@ -774,26 +773,50 @@ export default function SubtitleTimeline({
                         {rulerTicks}
                     </div>
 
-                    <div
-                        className="absolute rounded bg-white/2"
-                        style={{ top: RULER_HEIGHT + 2, height: TRACK_HEIGHT, left: TIMELINE_OFFSET, right: TIMELINE_OFFSET }}
-                        onMouseDown={handleTrackMouseDown}
-                    />
+                    {tracks.map((track, trackIndex) => (
+                        <div key={track.id}>
+                            <div
+                                className="absolute rounded bg-white/2"
+                                style={{
+                                    top: RULER_HEIGHT + 2 + trackIndex * (TRACK_HEIGHT + TRACK_GAP),
+                                    height: TRACK_HEIGHT,
+                                    left: TIMELINE_OFFSET,
+                                    right: TIMELINE_OFFSET
+                                }}
+                                onMouseDown={handleTrackMouseDown}
+                            />
 
-                    {subtitles.map(sub => (
-                        <SubtitleBlock
-                            key={sub.id}
-                            sub={sub}
-                            pps={pixelsPerSecond}
-                            isActive={activeSubtitleId === sub.id}
-                            isSelected={selectedIds.has(sub.id)}
-                            isDragging={dragState?.subtitleId === sub.id}
-                            draggingEdge={dragState?.edge}
-                            hoveredEdge={hoveredEdge?.id === sub.id ? hoveredEdge.edge : undefined}
-                            onDragStart={handleSubtitleMouseDown}
-                            onHover={handleSubtitleHover}
-                            onEdit={handleSubtitleEdit}
-                        />
+                            {track.icon && (
+                                <div
+                                    className="absolute left-4 z-10 flex items-center justify-center px-1"
+                                    style={{
+                                        top: RULER_HEIGHT + 2 + trackIndex * (TRACK_HEIGHT + TRACK_GAP) + 6,
+                                        height: TRACK_HEIGHT - 12,
+                                        width: 24
+                                    }}
+                                >
+                                    <div className="text-white/40">{track.icon}</div>
+                                </div>
+                            )}
+
+                            {track.subtitles.map(sub => (
+                                <SubtitleBlock
+                                    key={`${track.id}-${sub.id}`}
+                                    sub={sub}
+                                    trackId={track.id}
+                                    trackIndex={trackIndex}
+                                    pps={pixelsPerSecond}
+                                    isActive={activeSubtitleId === sub.id}
+                                    isSelected={selectedIds.has(sub.id)}
+                                    isDragging={dragState?.subtitleId === sub.id}
+                                    draggingEdge={dragState?.edge}
+                                    hoveredEdge={hoveredEdge?.id === sub.id ? hoveredEdge.edge : undefined}
+                                    onDragStart={handleSubtitleMouseDown}
+                                    onHover={handleSubtitleHover}
+                                    onEdit={onSubtitleTextEdit}
+                                />
+                            ))}
+                        </div>
                     ))}
 
                     <div
@@ -868,7 +891,7 @@ export default function SubtitleTimeline({
                             className="flex w-full items-center gap-2.5 px-3 py-2 text-xs text-white/70 transition-colors hover:bg-white/10 hover:text-white"
                             onClick={() => {
                                 const time = contextMenu.time;
-                                const next = [...subtitles].sort((a, b) => a.start - b.start).find(s => s.start > time);
+                                const next = sortedSubtitles.find(s => s.start > time);
 
                                 setContextMenu(null);
                                 onSubtitleAdd!(time, Math.min(time + 1, next ? next.start : duration));

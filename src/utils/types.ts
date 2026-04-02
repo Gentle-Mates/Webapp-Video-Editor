@@ -1,12 +1,23 @@
-export interface Subtitle {
+import type { ReactNode } from 'react';
+
+type TranscriptionStatus = 'idle' | 'extracting' | 'uploading' | 'transcribing' | 'done' | 'error';
+
+type TranslationMode = 'mix' | 'fr' | 'en';
+
+type SubtitleView = 'original' | TranslationMode;
+
+interface Subtitle {
     id: number;
     start: number;
     end: number;
     text: string;
 }
 
-export type TranscriptionStatus = 'idle' | 'extracting' | 'uploading' | 'transcribing' | 'done' | 'error';
+interface SubtitleTrack {
+    id: SubtitleView;
+    label: string;
+    subtitles: Subtitle[];
+    icon?: ReactNode;
+}
 
-export type TranslationMode = 'mix' | 'fr' | 'en';
-
-export type SubtitleView = 'original' | TranslationMode;
+export type { TranscriptionStatus, TranslationMode, SubtitleView, Subtitle, SubtitleTrack };

@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useEffectEvent, useMemo } from 'react';
 import { signOut } from 'next-auth/react';
 import type { DragEvent, ChangeEvent } from 'react';
-import type { Subtitle, SubtitleView, TranslationMode } from '@/utils/types';
+import type { Subtitle, SubtitleView, TranslationMode, SubtitleTrack } from '@/utils/types';
 
 import Image from 'next/image';
 
@@ -15,11 +15,73 @@ import SubtitleTimeline from '@/components/SubtitleTimeline';
 import useTranscription from '@/hooks/useTranscription';
 import useTranslation from '@/hooks/useTranslation';
 
-const ALL_TRACKS: Record<SubtitleView, { label: string; suffix: string }> = {
-    original: { label: 'Original', suffix: '' },
-    mix: { label: 'Mix', suffix: ' - MIX' },
-    fr: { label: 'Français', suffix: ' - FR' },
-    en: { label: 'Anglais', suffix: ' - EN' }
+const ALL_TRACKS: Record<SubtitleView, { label: string; suffix: string; icon: React.ReactNode }> = {
+    original: {
+        label: 'Original',
+        suffix: '',
+        icon: (
+            <svg
+                className="h-3.5 w-3.5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+            >
+                <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
+                />
+            </svg>
+        )
+    },
+    mix: {
+        label: 'Mix',
+        suffix: ' - MIX',
+        icon: (
+            <svg
+                className="h-3.5 w-3.5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+            >
+                <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5"
+                />
+            </svg>
+        )
+    },
+    fr: {
+        label: 'Français',
+        suffix: ' - FR',
+        icon: (
+            <Image
+                src="/flags/FR.svg"
+                alt="FR"
+                width={21}
+                height={14}
+                className="h-3 w-auto"
+                unoptimized
+            />
+        )
+    },
+    en: {
+        label: 'Anglais',
+        suffix: ' - EN',
+        icon: (
+            <Image
+                src="/flags/US.svg"
+                alt="EN"
+                width={21}
+                height={14}
+                className="h-3 w-auto"
+                unoptimized
+            />
+        )
+    }
 };
 
 export default function Home() {
@@ -32,7 +94,14 @@ export default function Home() {
     const [isDragging, setIsDragging] = useState(false);
     const [overlayTracks, setOverlayTracks] = useState<Record<SubtitleView, boolean>>({ original: true, mix: false, fr: false, en: false });
     const [showOverlayMenu, setShowOverlayMenu] = useState(false);
-    const [showTimeline, setShowTimeline] = useState(true);
+    const [timelineTracks, setTimelineTracks] = useState<Record<SubtitleView | 'showCurrent', boolean>>({
+        showCurrent: true,
+        original: false,
+        mix: false,
+        fr: false,
+        en: false
+    });
+    const [showTimelineMenu, setShowTimelineMenu] = useState(false);
     const [showExportMenu, setShowExportMenu] = useState(false);
     const [exportSelection, setExportSelection] = useState<Record<SubtitleView, boolean>>({
         original: true,
@@ -78,6 +147,33 @@ export default function Home() {
         return [...subs].sort((a, b) => a.start - b.start);
     }, [subtitleView, subtitles, translations]);
     const activeSubtitle = displayedSubtitles.find(sub => currentTime >= sub.start && currentTime <= sub.end) ?? null;
+
+    const timelineTracksToDisplay = useMemo(() => {
+        const activeTracks: SubtitleTrack[] = timelineTracks.showCurrent
+            ? [
+                  {
+                      id: subtitleView,
+                      label: '',
+                      subtitles: displayedSubtitles
+                  }
+              ]
+            : [];
+
+        const otherTracks = (Object.keys(ALL_TRACKS) as SubtitleView[])
+            .filter(trackId => timelineTracks[trackId] && !(timelineTracks.showCurrent && trackId === subtitleView))
+            .map(trackId => {
+                const subs = trackId === 'original' ? subtitles : translations[trackId as TranslationMode];
+                return {
+                    id: trackId,
+                    label: ALL_TRACKS[trackId].label,
+                    subtitles: subs,
+                    icon: ALL_TRACKS[trackId].icon
+                };
+            })
+            .filter(track => track.subtitles.length > 0);
+
+        return [...activeTracks, ...otherTracks];
+    }, [timelineTracks, subtitleView, displayedSubtitles, subtitles, translations]);
 
     function toggleOverlayTrack(track: SubtitleView) {
         setOverlayTracks(prev => ({ ...prev, [track]: !prev[track] }));
@@ -827,32 +923,125 @@ export default function Home() {
                                         style={{ width: '148px' }}
                                     >
                                         {/* Timeline toggle */}
-                                        <button
-                                            onClick={() => setShowTimeline(v => !v)}
-                                            className={`flex h-10 w-10 items-center justify-center rounded-full transition-all ${
-                                                subtitles.length === 0
-                                                    ? 'bg-white/5 text-white/10 cursor-not-allowed'
-                                                    : showTimeline
-                                                      ? 'bg-violet-500/10 text-secondary'
-                                                      : 'bg-white/5 text-white/30 hover:bg-white/10 hover:text-white/60'
-                                            }`}
-                                            disabled={subtitles.length === 0}
-                                            title={showTimeline ? 'Masquer la timeline' : 'Afficher la timeline'}
-                                        >
-                                            <svg
-                                                className="h-4 w-4"
-                                                fill="none"
-                                                viewBox="0 0 24 24"
-                                                stroke="currentColor"
-                                                strokeWidth={2}
+                                        <div className="relative">
+                                            <button
+                                                onClick={() => subtitles.length > 0 && setShowTimelineMenu(v => !v)}
+                                                className={`flex h-10 w-10 items-center justify-center rounded-full transition-all ${
+                                                    subtitles.length === 0
+                                                        ? 'bg-white/5 text-white/10 cursor-not-allowed'
+                                                        : showTimelineMenu || Object.values(timelineTracks).some(Boolean)
+                                                          ? 'bg-violet-500/10 text-secondary'
+                                                          : 'bg-white/5 text-white/30 hover:bg-white/10 hover:text-white/60'
+                                                }`}
+                                                disabled={subtitles.length === 0}
+                                                title="Paramètres de la timeline"
                                             >
-                                                <path
-                                                    strokeLinecap="round"
-                                                    strokeLinejoin="round"
-                                                    d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 0 1-1.125-1.125M3.375 19.5h1.5C5.496 19.5 6 18.996 6 18.375m-2.625 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-1.5A1.125 1.125 0 0 1 18 18.375M20.625 4.5H3.375m17.25 0c.621 0 1.125.504 1.125 1.125M20.625 4.5h-1.5C18.504 4.5 18 5.004 18 5.625m3.75 0v1.5c0 .621-.504 1.125-1.125 1.125M3.375 4.5c-.621 0-1.125.504-1.125 1.125M3.375 4.5h1.5C5.496 4.5 6 5.004 6 5.625m-2.625 0v1.5c0 .621.504 1.125 1.125 1.125m0 0h1.5m-1.5 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m1.5-3.75C5.496 8.25 6 7.746 6 7.125v-1.5M4.875 8.25C5.496 8.25 6 8.754 6 9.375v1.5c0 .621-.504 1.125-1.125 1.125m1.5 0h12m-12 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m12-3.75c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-1.5m1.5 0c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m0-3.75h-12"
-                                                />
-                                            </svg>
-                                        </button>
+                                                <svg
+                                                    className="h-4 w-4"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    stroke="currentColor"
+                                                    strokeWidth={2}
+                                                >
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 0 1-1.125-1.125M3.375 19.5h1.5C5.496 19.5 6 18.996 6 18.375m-2.625 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-1.5A1.125 1.125 0 0 1 18 18.375M20.625 4.5H3.375m17.25 0c.621 0 1.125.504 1.125 1.125M20.625 4.5h-1.5C18.504 4.5 18 5.004 18 5.625m3.75 0v1.5c0 .621-.504 1.125-1.125 1.125M3.375 4.5c-.621 0-1.125.504-1.125 1.125M3.375 4.5h1.5C5.496 4.5 6 5.004 6 5.625m-2.625 0v1.5c0 .621.504 1.125 1.125 1.125m0 0h1.5m-1.5 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m1.5-3.75C5.496 8.25 6 7.746 6 7.125v-1.5M4.875 8.25C5.496 8.25 6 8.754 6 9.375v1.5c0 .621-.504 1.125-1.125 1.125m1.5 0h12m-12 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m12-3.75c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-1.5m1.5 0c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m0-3.75h-12"
+                                                    />
+                                                </svg>
+                                            </button>
+
+                                            {showTimelineMenu && (
+                                                <>
+                                                    <div
+                                                        className="fixed inset-0 z-10"
+                                                        onPointerDown={() => setShowTimelineMenu(false)}
+                                                    />
+                                                    <div className="absolute bottom-full right-0 z-20 mb-2 min-w-40 rounded-xl border border-white/10 bg-[#141416] p-1.5 shadow-xl">
+                                                        <button
+                                                            onClick={() =>
+                                                                setTimelineTracks({
+                                                                    showCurrent: true,
+                                                                    original: false,
+                                                                    mix: false,
+                                                                    fr: false,
+                                                                    en: false
+                                                                })
+                                                            }
+                                                            className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium transition-all hover:bg-white/5 ${
+                                                                timelineTracks.showCurrent ? 'text-secondary' : 'text-white/50 hover:text-white/80'
+                                                            }`}
+                                                        >
+                                                            <div
+                                                                className={`flex h-4 w-4 items-center justify-center rounded border transition-all ${
+                                                                    timelineTracks.showCurrent
+                                                                        ? 'border-secondary bg-secondary text-black'
+                                                                        : 'border-white/20'
+                                                                }`}
+                                                            >
+                                                                {timelineTracks.showCurrent && (
+                                                                    <svg
+                                                                        className="h-3 w-3"
+                                                                        viewBox="0 0 24 24"
+                                                                        fill="none"
+                                                                        stroke="currentColor"
+                                                                        strokeWidth={3}
+                                                                    >
+                                                                        <polyline points="20 6 9 17 4 12" />
+                                                                    </svg>
+                                                                )}
+                                                            </div>
+                                                            Track en cours
+                                                        </button>
+
+                                                        <div className="my-1 h-px bg-white/5" />
+
+                                                        {(Object.keys(ALL_TRACKS) as SubtitleView[]).map(trackId => {
+                                                            const active = timelineTracks[trackId];
+
+                                                            if (!(trackId === 'original' ? subtitles.length > 0 : translations[trackId].length > 0)) {
+                                                                return null;
+                                                            }
+
+                                                            return (
+                                                                <button
+                                                                    key={trackId}
+                                                                    onClick={() =>
+                                                                        setTimelineTracks(prev => ({
+                                                                            ...prev,
+                                                                            showCurrent: false,
+                                                                            [trackId]: !prev[trackId]
+                                                                        }))
+                                                                    }
+                                                                    className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium transition-all hover:bg-white/5 ${
+                                                                        active ? 'text-secondary' : 'text-white/50 hover:text-white/80'
+                                                                    }`}
+                                                                >
+                                                                    <div
+                                                                        className={`flex h-4 w-4 items-center justify-center rounded border transition-all ${
+                                                                            active ? 'border-secondary bg-secondary text-black' : 'border-white/20'
+                                                                        }`}
+                                                                    >
+                                                                        {active && (
+                                                                            <svg
+                                                                                className="h-3 w-3"
+                                                                                viewBox="0 0 24 24"
+                                                                                fill="none"
+                                                                                stroke="currentColor"
+                                                                                strokeWidth={3}
+                                                                            >
+                                                                                <polyline points="20 6 9 17 4 12" />
+                                                                            </svg>
+                                                                        )}
+                                                                    </div>
+                                                                    {ALL_TRACKS[trackId].label}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
 
                                         {/* Subtitle overlay */}
                                         <div className="relative">
@@ -933,16 +1122,19 @@ export default function Home() {
                                 </div>
 
                                 {/* Subtitle Timeline */}
-                                {showTimeline && status === 'done' && displayedSubtitles.length > 0 && (
+                                {timelineTracksToDisplay.length > 0 && status === 'done' && (
                                     <div className="mt-4 rounded-lg border border-white/5 bg-white/[0.02]">
                                         <SubtitleTimeline
-                                            subtitles={displayedSubtitles}
+                                            tracks={timelineTracksToDisplay}
                                             duration={duration}
                                             currentTime={currentTime}
                                             activeSubtitleId={activeSubtitle?.id ?? null}
                                             onSeek={seekTo}
                                             onSubtitleUpdate={handleTimelineSubtitleUpdate}
-                                            onSubtitleTextEdit={startEditing}
+                                            onSubtitleTextEdit={(trackId, sub) => {
+                                                setSubtitleView(trackId);
+                                                startEditing(sub);
+                                            }}
                                             onSubtitlesDelete={ids => ids.forEach(removeSubtitle)}
                                             onSubtitleAdd={addNewSubtitle}
                                         />
