@@ -910,7 +910,7 @@ export default function Home() {
                                             onSeek={seekTo}
                                             onSubtitleUpdate={handleTimelineSubtitleUpdate}
                                             onSubtitleTextEdit={startEditing}
-                                            onSubtitleDelete={removeSubtitle}
+                                            onSubtitlesDelete={(ids) => ids.forEach(removeSubtitle)}
                                             onSubtitleAdd={addNewSubtitle}
                                         />
                                     </div>

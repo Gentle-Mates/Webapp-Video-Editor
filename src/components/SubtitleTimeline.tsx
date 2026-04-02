@@ -12,6 +12,18 @@ type DragState = {
     originalEnd: number;
 };
 
+type LassoState = {
+    startX: number;
+    startY: number;
+    startScrollLeft: number;
+    currentX: number;
+    currentY: number;
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+};
+
 const MIN_SUBTITLE_DURATION = 0.1;
 const TRACK_HEIGHT = 36;
 const RULER_HEIGHT = 24;
@@ -47,6 +59,7 @@ interface SubtitleBlockProps {
     sub: Subtitle;
     pps: number;
     isActive: boolean;
+    isSelected: boolean;
     isDragging: boolean;
     draggingEdge?: DragState['edge'];
     hoveredEdge?: ResizeEdge;
@@ -56,7 +69,7 @@ interface SubtitleBlockProps {
 }
 
 const SubtitleBlock = memo(function SubtitleBlock(props: SubtitleBlockProps) {
-    const { sub, pps, isActive, isDragging, draggingEdge, hoveredEdge, onDragStart, onHover, onEdit } = props;
+    const { sub, pps, isActive, isSelected, isDragging, draggingEdge, hoveredEdge, onDragStart, onHover, onEdit } = props;
 
     const left = sub.start * pps + TIMELINE_OFFSET;
     const width = (sub.end - sub.start) * pps;
@@ -66,9 +79,11 @@ const SubtitleBlock = memo(function SubtitleBlock(props: SubtitleBlockProps) {
             className={`absolute flex items-center rounded-md border select-none transition-colors ${
                 isDragging
                     ? 'bg-violet-500/35 border-violet-400/60 z-10'
-                    : isActive
-                      ? 'bg-violet-500/25 border-violet-400/40'
-                      : 'bg-white/[0.07] border-white/10 hover:bg-white/12 hover:border-white/20'
+                    : isSelected
+                      ? 'bg-violet-500/20 border-violet-400/50'
+                      : isActive
+                        ? 'bg-violet-500/25 border-violet-400/40'
+                        : 'bg-white/[0.07] border-white/10 hover:bg-white/12 hover:border-white/20'
             }`}
             style={{ left: `${left}px`, width: `${Math.max(width, 4)}px`, top: RULER_HEIGHT + 2, height: TRACK_HEIGHT }}
         >
@@ -116,7 +131,7 @@ interface SubtitleTimelineProps {
     onSeek: (time: number) => void;
     onSubtitleUpdate: (id: number, patch: Partial<Pick<Subtitle, 'start' | 'end'>>) => void;
     onSubtitleTextEdit: (sub: Subtitle) => void;
-    onSubtitleDelete?: (id: number) => void;
+    onSubtitlesDelete?: (ids: number[]) => void;
     onSubtitleAdd?: (start: number, end: number) => void;
 }
 
@@ -128,7 +143,7 @@ export default function SubtitleTimeline({
     onSeek,
     onSubtitleUpdate,
     onSubtitleTextEdit,
-    onSubtitleDelete,
+    onSubtitlesDelete,
     onSubtitleAdd
 }: SubtitleTimelineProps) {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -137,6 +152,9 @@ export default function SubtitleTimeline({
     const dragRef = useRef<DragState | null>(null);
     const seekingRef = useRef(false);
     const isZoomingRef = useRef(false);
+    const lassoRef = useRef<LassoState | null>(null);
+    const selectedOriginalsRef = useRef<Map<number, { start: number; end: number }>>(new Map());
+    const skipNextClickRef = useRef(false);
 
     const [pixelsPerSecond, setPixelsPerSecond] = useState(80);
     const [containerWidth, setContainerWidth] = useState(0);
@@ -145,6 +163,8 @@ export default function SubtitleTimeline({
     const [scrollLeft, setScrollLeft] = useState(0);
     const [hoveredEdge, setHoveredEdge] = useState<{ id: number; edge: 'left' | 'right' } | null>(null);
     const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+    const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+    const [lasso, setLasso] = useState<LassoState | null>(null);
 
     useEffect(() => {
         if (!contextMenu) {
@@ -176,7 +196,7 @@ export default function SubtitleTimeline({
     }, [containerWidth, duration]);
 
     useEffect(() => {
-        if (!onSubtitleDelete || !activeSubtitleId) {
+        if (!onSubtitlesDelete) {
             return;
         }
 
@@ -191,14 +211,20 @@ export default function SubtitleTimeline({
                 return;
             }
 
-            e.preventDefault();
-            onSubtitleDelete!(activeSubtitleId!);
+            if (selectedIds.size > 0) {
+                e.preventDefault();
+                onSubtitlesDelete!([...selectedIds]);
+                setSelectedIds(new Set());
+            } else if (activeSubtitleId) {
+                e.preventDefault();
+                onSubtitlesDelete!([activeSubtitleId]);
+            }
         }
 
         document.addEventListener('keydown', handleKeyDown);
 
         return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [onSubtitleDelete, activeSubtitleId]);
+    }, [onSubtitlesDelete, activeSubtitleId, selectedIds]);
 
     const totalWidth = duration * pixelsPerSecond + TIMELINE_PADDING;
     const sortedSubtitles = useMemo(() => [...subtitles].sort((a, b) => a.start - b.start), [subtitles]);
@@ -379,6 +405,36 @@ export default function SubtitleTimeline({
             e.stopPropagation();
             e.preventDefault();
 
+            let newSelected: Set<number>;
+
+            if (!(e.shiftKey || e.ctrlKey || e.metaKey)) {
+                newSelected = selectedIds.has(sub.id) ? selectedIds : new Set([sub.id]);
+            } else {
+                newSelected = new Set(selectedIds);
+
+                if (selectedIds.has(sub.id)) {
+                    newSelected.delete(sub.id);
+                } else {
+                    newSelected.add(sub.id);
+                }
+            }
+
+            setSelectedIds(newSelected);
+
+            const isMultiDrag = edge === 'move' && newSelected.size > 1 && newSelected.has(sub.id);
+
+            if (isMultiDrag) {
+                const originals = new Map<number, { start: number; end: number }>();
+
+                for (const s of subtitles) {
+                    if (newSelected.has(s.id)) {
+                        originals.set(s.id, { start: s.start, end: s.end });
+                    }
+                }
+
+                selectedOriginalsRef.current = originals;
+            }
+
             const state: DragState = {
                 subtitleId: sub.id,
                 edge,
@@ -422,6 +478,70 @@ export default function SubtitleTimeline({
                                 'end'
                             ).time
                         );
+                    } else if (isMultiDrag) {
+                        const originals = selectedOriginalsRef.current;
+                        const selectedIdSet = new Set(originals.keys());
+
+                        const getGroupBounds = () => {
+                            let min = Infinity;
+                            let max = -Infinity;
+
+                            for (const { start, end } of originals.values()) {
+                                min = Math.min(min, start);
+                                max = Math.max(max, end);
+                            }
+
+                            return { min, max };
+                        };
+
+                        const findSnapDelta = (baseDt: number, threshold: number) => {
+                            let bestDist = threshold;
+                            let bestDelta = 0;
+
+                            for (const orig of originals.values()) {
+                                const movedStart = orig.start + baseDt;
+                                const movedEnd = orig.end + baseDt;
+
+                                for (const sub of subtitles) {
+                                    if (selectedIdSet.has(sub.id)) {
+                                        continue;
+                                    }
+
+                                    for (const edge of [sub.start, sub.end]) {
+                                        const startDist = Math.abs(movedStart - edge);
+                                        const endDist = Math.abs(movedEnd - edge);
+
+                                        if (startDist < bestDist) {
+                                            bestDist = startDist;
+                                            bestDelta = edge - movedStart;
+                                        }
+
+                                        if (endDist < bestDist) {
+                                            bestDist = endDist;
+                                            bestDelta = edge - movedEnd;
+                                        }
+                                    }
+                                }
+                            }
+
+                            return bestDist < threshold ? bestDelta : 0;
+                        };
+
+                        const { min: groupMin, max: groupMax } = getGroupBounds();
+
+                        let clampedDt = Math.max(-groupMin, Math.min(duration - groupMax, dt));
+                        const snapDelta = findSnapDelta(clampedDt, 6 / ppsRef.current);
+
+                        if (snapDelta !== 0 && groupMin + clampedDt + snapDelta >= 0 && groupMax + clampedDt + snapDelta <= duration) {
+                            clampedDt += snapDelta;
+                        }
+
+                        for (const [id, orig] of originals) {
+                            onSubtitleUpdate(id, {
+                                start: orig.start + clampedDt,
+                                end: orig.end + clampedDt
+                            });
+                        }
                     } else {
                         const dur = current.originalEnd - current.originalStart;
                         let nS = Math.max(0, Math.min(duration - dur, current.originalStart + dt));
@@ -446,10 +566,12 @@ export default function SubtitleTimeline({
                 () => {
                     dragRef.current = null;
                     setDragState(null);
+                    selectedOriginalsRef.current = new Map();
+                    skipNextClickRef.current = true;
                 }
             );
         },
-        [duration, snapTime, updateWithPush]
+        [duration, snapTime, updateWithPush, selectedIds, subtitles, onSubtitleUpdate]
     );
 
     const handleSubtitleHover = useCallback((id: number, edge?: ResizeEdge) => {
@@ -504,10 +626,16 @@ export default function SubtitleTimeline({
     };
 
     const handleTimelineClick = (e: MouseEvent<HTMLDivElement>) => {
-        if (dragRef.current || seekingRef.current) {
+        if (skipNextClickRef.current) {
+            skipNextClickRef.current = false;
             return;
         }
 
+        if (dragRef.current || seekingRef.current || lassoRef.current) {
+            return;
+        }
+
+        setSelectedIds(new Set());
         onSeek(getTimeFromClientX(e.clientX));
     };
 
@@ -544,6 +672,85 @@ export default function SubtitleTimeline({
         );
     };
 
+    const handleTrackMouseDown = (e: MouseEvent<HTMLDivElement>) => {
+        if (e.button !== 0 || dragRef.current || seekingRef.current) {
+            return;
+        }
+
+        const container = containerRef.current;
+
+        if (!container) {
+            return;
+        }
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        const state: LassoState = {
+            startX: e.clientX,
+            startY: e.clientY,
+            startScrollLeft: container.scrollLeft,
+            currentX: e.clientX,
+            currentY: e.clientY,
+            left: 0,
+            top: 0,
+            width: 0,
+            height: 0
+        };
+
+        lassoRef.current = state;
+        setLasso(state);
+
+        startDrag(
+            'crosshair',
+            ev => {
+                const current = lassoRef.current;
+                const container = containerRef.current;
+
+                if (!current || !container) {
+                    return;
+                }
+
+                const rect = container.getBoundingClientRect();
+                const x1 = current.startX - rect.left + current.startScrollLeft;
+                const x2 = ev.clientX - rect.left + container.scrollLeft;
+                const y1 = current.startY - rect.top;
+                const y2 = ev.clientY - rect.top;
+
+                const updated: LassoState = {
+                    ...current,
+                    currentX: ev.clientX,
+                    currentY: ev.clientY,
+                    left: Math.min(x1, x2),
+                    top: Math.min(y1, y2),
+                    width: Math.abs(x2 - x1),
+                    height: Math.abs(y2 - y1)
+                };
+
+                lassoRef.current = updated;
+                setLasso(updated);
+
+                const timeLeft = Math.min((x1 - TIMELINE_OFFSET) / ppsRef.current, (x2 - TIMELINE_OFFSET) / ppsRef.current);
+                const timeRight = Math.max((x1 - TIMELINE_OFFSET) / ppsRef.current, (x2 - TIMELINE_OFFSET) / ppsRef.current);
+
+                setSelectedIds(new Set(subtitles.filter(sub => sub.end > timeLeft && sub.start < timeRight).map(sub => sub.id)));
+            },
+            () => {
+                const current = lassoRef.current;
+
+                lassoRef.current = null;
+                setLasso(null);
+
+                if (current && Math.abs(current.currentX - current.startX) >= 3) {
+                    skipNextClickRef.current = true;
+                } else {
+                    setSelectedIds(new Set());
+                    onSeek(getTimeFromClientX(current?.startX ?? 0));
+                }
+            }
+        );
+    };
+
     return (
         <div className="flex flex-col">
             <div
@@ -567,6 +774,7 @@ export default function SubtitleTimeline({
                     <div
                         className="absolute rounded bg-white/2"
                         style={{ top: RULER_HEIGHT + 2, height: TRACK_HEIGHT, left: TIMELINE_OFFSET, right: TIMELINE_OFFSET }}
+                        onMouseDown={handleTrackMouseDown}
                     />
 
                     {subtitles.map(sub => (
@@ -575,6 +783,7 @@ export default function SubtitleTimeline({
                             sub={sub}
                             pps={pixelsPerSecond}
                             isActive={activeSubtitleId === sub.id}
+                            isSelected={selectedIds.has(sub.id)}
                             isDragging={dragState?.subtitleId === sub.id}
                             draggingEdge={dragState?.edge}
                             hoveredEdge={hoveredEdge?.id === sub.id ? hoveredEdge.edge : undefined}
@@ -598,6 +807,18 @@ export default function SubtitleTimeline({
                             style={{ left: '7px' }}
                         />
                     </div>
+
+                    {lasso && (
+                        <div
+                            className="absolute bg-violet-400/10 border border-violet-400/30 rounded-sm pointer-events-none"
+                            style={{
+                                left: lasso.left,
+                                top: lasso.top,
+                                width: lasso.width,
+                                height: lasso.height
+                            }}
+                        />
+                    )}
                 </div>
             </div>
 
