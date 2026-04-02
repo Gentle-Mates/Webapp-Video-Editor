@@ -92,7 +92,13 @@ export default function Home() {
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
     const [isDragging, setIsDragging] = useState(false);
-    const [overlayTracks, setOverlayTracks] = useState<Record<SubtitleView, boolean>>({ original: true, mix: false, fr: false, en: false });
+    const [overlayTracks, setOverlayTracks] = useState<Record<SubtitleView | 'showCurrent', boolean>>({
+        showCurrent: true,
+        original: false,
+        mix: false,
+        fr: false,
+        en: false
+    });
     const [showOverlayMenu, setShowOverlayMenu] = useState(false);
     const [timelineTracks, setTimelineTracks] = useState<Record<SubtitleView | 'showCurrent', boolean>>({
         showCurrent: true,
@@ -176,12 +182,29 @@ export default function Home() {
     }, [timelineTracks, subtitleView, displayedSubtitles, subtitles, translations]);
 
     function toggleOverlayTrack(track: SubtitleView) {
-        setOverlayTracks(prev => ({ ...prev, [track]: !prev[track] }));
+        setOverlayTracks(prev => ({
+            ...prev,
+            showCurrent: false,
+            [track]: !prev[track]
+        }));
     }
 
     const activeOverlayTracks = useMemo(() => {
-        return (Object.keys(overlayTracks) as SubtitleView[])
-            .filter(track => overlayTracks[track])
+        const overlayTracksToProcess: SubtitleView[] = [];
+
+        if (overlayTracks.showCurrent) {
+            overlayTracksToProcess.push(subtitleView);
+        }
+
+        (Object.keys(overlayTracks) as (SubtitleView | 'showCurrent')[]).forEach(track => {
+            if (track !== 'showCurrent' && overlayTracks[track]) {
+                if (!(overlayTracks.showCurrent && track === subtitleView)) {
+                    overlayTracksToProcess.push(track as SubtitleView);
+                }
+            }
+        });
+
+        return overlayTracksToProcess
             .map(track => {
                 const subs = track === 'original' ? subtitles : translations[track].length > 0 ? translations[track] : null;
 
@@ -194,7 +217,7 @@ export default function Home() {
                 return active ? { track, text: active.text } : null;
             })
             .filter((s): s is { track: SubtitleView; text: string } => s !== null);
-    }, [overlayTracks, subtitles, translations, currentTime]);
+    }, [overlayTracks, subtitleView, subtitles, translations, currentTime]);
 
     function startEditing(sub: { id: number; text: string; start: number; end: number }) {
         setEditingId(sub.id);
@@ -718,19 +741,20 @@ export default function Home() {
                                 {activeOverlayTracks.length > 0 && (
                                     <div className="absolute bottom-3 left-1/2 -translate-x-1/2 max-w-[80%] flex flex-col items-center gap-1">
                                         {activeOverlayTracks.map(({ track, text }) => (
-                                            <p
+                                            <div
                                                 key={track}
-                                                className={`rounded-lg px-4 py-2 text-center text-sm font-medium backdrop-blur-sm ${
-                                                    activeOverlayTracks.length > 1 ? 'bg-black/60 text-white/80' : 'bg-black/70 text-white'
-                                                }`}
-                                            >
-                                                {text}
-                                            </p>
+                                                className="flex items-center gap-2 rounded-lg bg-black/70 px-4 py-2 text-center text-sm font-medium text-white backdrop-blur-sm"
+                                            >                                                {activeOverlayTracks.length > 1 && (
+                                                    <div className="shrink-0 flex items-center justify-center text-white/60">
+                                                        {ALL_TRACKS[track].icon}
+                                                    </div>
+                                                )}
+                                                <p>{text}</p>
+                                            </div>
                                         ))}
                                     </div>
                                 )}
-                            </div>
-
+                                </div>
                             {/* Controls panel */}
                             <div className="shrink-0 border-t border-white/5 bg-[#0c0c0e] px-6 py-4">
                                 {/* Timeline */}
@@ -1077,40 +1101,78 @@ export default function Home() {
                                                         className="fixed inset-0 z-10"
                                                         onPointerDown={() => setShowOverlayMenu(false)}
                                                     />
-                                                    <div className="absolute bottom-full right-0 z-20 mb-2 min-w-[140px] rounded-xl border border-white/10 bg-[#141416] p-1.5 shadow-xl">
-                                                        {tracks.map(track => {
-                                                            const active = overlayTracks[track];
+                                                    <div className="absolute bottom-full right-0 z-20 mb-2 min-w-40 rounded-xl border border-white/10 bg-[#141416] p-1.5 shadow-xl">
+                                                        <button
+                                                            onClick={() =>
+                                                                setOverlayTracks({
+                                                                    showCurrent: true,
+                                                                    original: false,
+                                                                    mix: false,
+                                                                    fr: false,
+                                                                    en: false
+                                                                })
+                                                            }
+                                                            className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium transition-all hover:bg-white/5 ${
+                                                                overlayTracks.showCurrent ? 'text-secondary' : 'text-white/50 hover:text-white/80'
+                                                            }`}
+                                                        >
+                                                            <div
+                                                                className={`flex h-4 w-4 items-center justify-center rounded border transition-all ${
+                                                                    overlayTracks.showCurrent
+                                                                        ? 'border-secondary bg-secondary text-black'
+                                                                        : 'border-white/20'
+                                                                }`}
+                                                            >
+                                                                {overlayTracks.showCurrent && (
+                                                                    <svg
+                                                                        className="h-3 w-3"
+                                                                        viewBox="0 0 24 24"
+                                                                        fill="none"
+                                                                        stroke="currentColor"
+                                                                        strokeWidth={3}
+                                                                    >
+                                                                        <polyline points="20 6 9 17 4 12" />
+                                                                    </svg>
+                                                                )}
+                                                            </div>
+                                                            Track en cours
+                                                        </button>
+
+                                                        <div className="my-1 h-px bg-white/5" />
+
+                                                        {(Object.keys(ALL_TRACKS) as SubtitleView[]).map(trackId => {
+                                                            const active = overlayTracks[trackId];
+
+                                                            if (!(trackId === 'original' ? subtitles.length > 0 : translations[trackId].length > 0)) {
+                                                                return null;
+                                                            }
 
                                                             return (
                                                                 <button
-                                                                    key={track}
-                                                                    onClick={() => toggleOverlayTrack(track)}
+                                                                    key={trackId}
+                                                                    onClick={() => toggleOverlayTrack(trackId)}
                                                                     className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium transition-all hover:bg-white/5 ${
                                                                         active ? 'text-secondary' : 'text-white/50 hover:text-white/80'
                                                                     }`}
                                                                 >
-                                                                    <span
+                                                                    <div
                                                                         className={`flex h-4 w-4 items-center justify-center rounded border transition-all ${
-                                                                            active ? 'border-secondary bg-secondary/20' : 'border-white/20'
+                                                                            active ? 'border-secondary bg-secondary text-black' : 'border-white/20'
                                                                         }`}
                                                                     >
                                                                         {active && (
                                                                             <svg
-                                                                                className="h-2.5 w-2.5"
-                                                                                fill="none"
+                                                                                className="h-3 w-3"
                                                                                 viewBox="0 0 24 24"
+                                                                                fill="none"
                                                                                 stroke="currentColor"
                                                                                 strokeWidth={3}
                                                                             >
-                                                                                <path
-                                                                                    strokeLinecap="round"
-                                                                                    strokeLinejoin="round"
-                                                                                    d="M4.5 12.75l6 6 9-13.5"
-                                                                                />
+                                                                                <polyline points="20 6 9 17 4 12" />
                                                                             </svg>
                                                                         )}
-                                                                    </span>
-                                                                    {ALL_TRACKS[track].label}
+                                                                    </div>
+                                                                    {ALL_TRACKS[trackId].label}
                                                                 </button>
                                                             );
                                                         })}
