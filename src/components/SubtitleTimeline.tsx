@@ -561,7 +561,7 @@ export default function SubtitleTimeline({
                             }
                         }
 
-                        updateWithPush(current.subtitleId, nS, nE);
+                        onSubtitleUpdate(current.subtitleId, { start: nS, end: nE });
                     }
                 },
                 () => {
