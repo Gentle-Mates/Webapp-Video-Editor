@@ -34,9 +34,17 @@ export default function Home() {
     const editContainerRef = useRef<HTMLDivElement>(null);
     const subtitleElRefs = useRef<Map<number, HTMLElement>>(new Map());
 
-    const { status, subtitles, error, transcribe, reset, updateSubtitle, deleteSubtitle } = useTranscription();
-    const { translations, isTranslating, translate, syncTimings, updateTranslatedSubtitle, deleteTranslatedSubtitle, resetTranslations } =
-        useTranslation();
+    const { status, subtitles, error, transcribe, reset, updateSubtitle, addSubtitle, deleteSubtitle } = useTranscription();
+    const {
+        translations,
+        isTranslating,
+        translate,
+        syncTimings,
+        updateTranslatedSubtitle,
+        addTranslatedSubtitle,
+        deleteTranslatedSubtitle,
+        resetTranslations
+    } = useTranslation();
 
     const [editingId, setEditingId] = useState<number | null>(null);
     const [editText, setEditText] = useState('');
@@ -145,6 +153,15 @@ export default function Home() {
         if (editingId === id) {
             setEditingId(null);
         }
+    }
+
+    function addNewSubtitle(start: number, end: number) {
+        addSubtitle(start, end, '');
+
+        const sub: Subtitle = { id: subtitles.reduce((max, sub) => Math.max(max, sub.id), 0) + 1, start, end, text: '' };
+
+        addTranslatedSubtitle(sub);
+        startEditing(sub);
     }
 
     function handleTimelineSubtitleUpdate(id: number, patch: Partial<Pick<Subtitle, 'start' | 'end'>>) {
@@ -894,6 +911,7 @@ export default function Home() {
                                             onSubtitleUpdate={handleTimelineSubtitleUpdate}
                                             onSubtitleTextEdit={startEditing}
                                             onSubtitleDelete={removeSubtitle}
+                                            onSubtitleAdd={addNewSubtitle}
                                         />
                                     </div>
                                 )}
@@ -1216,138 +1234,167 @@ export default function Home() {
 
                             {/* Subtitles list */}
                             {status === 'done' && !isTranslating && displayedSubtitles.length > 0 && (
-                                <div
-                                    ref={subtitleListRef}
-                                    className="flex-1 overflow-y-auto scrollbar-dark"
-                                >
-                                    {displayedSubtitles.map(sub =>
-                                        editingId === sub.id ? (
-                                            <div
-                                                ref={el => {
-                                                    editContainerRef.current = el;
+                                <div className="flex flex-1 flex-col overflow-hidden">
+                                    <div
+                                        ref={subtitleListRef}
+                                        className="flex-1 overflow-y-auto scrollbar-dark"
+                                    >
+                                        {displayedSubtitles.map(sub =>
+                                            editingId === sub.id ? (
+                                                <div
+                                                    ref={el => {
+                                                        editContainerRef.current = el;
 
-                                                    if (el) {
-                                                        subtitleElRefs.current.set(sub.id, el);
-                                                    } else {
-                                                        subtitleElRefs.current.delete(sub.id);
-                                                    }
-                                                }}
-                                                key={sub.id}
-                                                className="w-full px-4 py-3 border-b border-white/5 bg-violet-500/10"
-                                            >
-                                                {/* Time editing */}
-                                                <div className="flex flex-col gap-1.5 mb-2">
-                                                    <div className="flex items-center gap-2">
-                                                        <ScrubInput
-                                                            label="Début"
-                                                            value={editStart}
-                                                            onChange={setEditStart}
-                                                            onCommit={saveEdit}
-                                                            onCancel={cancelEdit}
-                                                            onSetCurrent={() => setEditStart(formatTime(currentTime))}
-                                                        />
-                                                        <div className="ml-auto flex items-center gap-1.5">
-                                                            <button
-                                                                onClick={() => removeSubtitle(sub.id)}
-                                                                className="flex h-6 w-6 items-center justify-center rounded-md text-white/40 transition-all hover:bg-red-500/15 hover:text-red-400"
-                                                                title="Supprimer le sous-titre"
-                                                            >
-                                                                <svg
-                                                                    xmlns="http://www.w3.org/2000/svg"
-                                                                    viewBox="0 0 20 20"
-                                                                    fill="currentColor"
-                                                                    className="size-3.5"
-                                                                >
-                                                                    <path
-                                                                        fillRule="evenodd"
-                                                                        d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.519.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z"
-                                                                        clipRule="evenodd"
-                                                                    />
-                                                                </svg>
-                                                            </button>
-                                                            <button
-                                                                onClick={cancelEdit}
-                                                                className="h-6 rounded bg-red-600 px-2.5 text-[10px] font-medium text-white transition-all hover:bg-red-500"
-                                                            >
-                                                                Annuler
-                                                            </button>
-                                                        </div>
-                                                    </div>
-
-                                                    <ScrubInput
-                                                        label="Fin"
-                                                        value={editEnd}
-                                                        onChange={setEditEnd}
-                                                        onCommit={saveEdit}
-                                                        onCancel={cancelEdit}
-                                                        onSetCurrent={() => setEditEnd(formatTime(currentTime))}
-                                                    />
-
-                                                    {/* Duration indicator */}
-                                                    {(() => {
-                                                        const start = parseTime(editStart);
-                                                        const end = parseTime(editEnd);
-                                                        const duration = start && end ? end - start : null;
-                                                        const isInvalid = duration && duration <= 0;
-
-                                                        return (
-                                                            <div className="flex items-center gap-1.5 ml-10">
-                                                                <span
-                                                                    className={`text-[10px] font-mono ${isInvalid ? 'text-red-400' : 'text-white/40'}`}
-                                                                >
-                                                                    Durée: {duration ? (isInvalid ? 'invalide' : `${duration.toFixed(2)}s`) : '—'}
-                                                                </span>
-                                                            </div>
-                                                        );
-                                                    })()}
-                                                </div>
-
-                                                <textarea
-                                                    value={editText}
-                                                    onChange={e => setEditText(e.target.value)}
-                                                    onKeyDown={e => {
-                                                        if (e.key === 'Enter' && !e.shiftKey) {
-                                                            e.preventDefault();
-                                                            saveEdit();
-                                                        }
-
-                                                        if (e.key === 'Escape') {
-                                                            cancelEdit();
+                                                        if (el) {
+                                                            subtitleElRefs.current.set(sub.id, el);
+                                                        } else {
+                                                            subtitleElRefs.current.delete(sub.id);
                                                         }
                                                     }}
-                                                    rows={1}
-                                                    className="w-full [field-sizing:content] resize-none rounded border-none bg-white/10 px-2 py-1 text-xs leading-relaxed text-white outline-none focus:ring-1 focus:ring-inset focus:ring-primary"
-                                                />
-                                            </div>
-                                        ) : (
-                                            <button
-                                                ref={el => {
-                                                    if (el) {
-                                                        subtitleElRefs.current.set(sub.id, el);
-                                                    } else {
-                                                        subtitleElRefs.current.delete(sub.id);
-                                                    }
-                                                }}
-                                                key={sub.id}
-                                                onClick={() => seekTo(sub.start)}
-                                                onDoubleClick={() => startEditing(sub)}
-                                                className={`w-full text-left px-4 py-3 border-b border-white/5 transition-all hover:bg-white/5 ${
-                                                    activeSubtitle?.id === sub.id ? 'bg-violet-500/10' : ''
-                                                }`}
-                                            >
-                                                <div className="flex items-center gap-2 mb-1">
-                                                    <span className="text-[10px] font-mono text-white/30">{formatTime(sub.start)}</span>
-                                                    <span className="text-[10px] text-white/20">&rarr;</span>
-                                                    <span className="text-[10px] font-mono text-white/30">{formatTime(sub.end)}</span>
-                                                </div>
-                                                <p
-                                                    className={`text-xs leading-relaxed ${activeSubtitle?.id === sub.id ? 'text-white' : 'text-white/60'}`}
+                                                    key={sub.id}
+                                                    className="w-full px-4 py-3 border-b border-white/5 bg-violet-500/10"
                                                 >
-                                                    {sub.text}
-                                                </p>
-                                            </button>
-                                        )
-                                    )}
+                                                    {/* Time editing */}
+                                                    <div className="flex flex-col gap-1.5 mb-2">
+                                                        <div className="flex items-center gap-2">
+                                                            <ScrubInput
+                                                                label="Début"
+                                                                value={editStart}
+                                                                onChange={setEditStart}
+                                                                onCommit={saveEdit}
+                                                                onCancel={cancelEdit}
+                                                                onSetCurrent={() => setEditStart(formatTime(currentTime))}
+                                                            />
+                                                            <div className="ml-auto flex items-center gap-1.5">
+                                                                <button
+                                                                    onClick={() => removeSubtitle(sub.id)}
+                                                                    className="flex h-6 w-6 items-center justify-center rounded-md text-white/40 transition-all hover:bg-red-500/15 hover:text-red-400"
+                                                                    title="Supprimer le sous-titre"
+                                                                >
+                                                                    <svg
+                                                                        xmlns="http://www.w3.org/2000/svg"
+                                                                        viewBox="0 0 20 20"
+                                                                        fill="currentColor"
+                                                                        className="size-3.5"
+                                                                    >
+                                                                        <path
+                                                                            fillRule="evenodd"
+                                                                            d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.519.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z"
+                                                                            clipRule="evenodd"
+                                                                        />
+                                                                    </svg>
+                                                                </button>
+                                                                <button
+                                                                    onClick={cancelEdit}
+                                                                    className="h-6 rounded bg-red-600 px-2.5 text-[10px] font-medium text-white transition-all hover:bg-red-500"
+                                                                >
+                                                                    Annuler
+                                                                </button>
+                                                            </div>
+                                                        </div>
+
+                                                        <ScrubInput
+                                                            label="Fin"
+                                                            value={editEnd}
+                                                            onChange={setEditEnd}
+                                                            onCommit={saveEdit}
+                                                            onCancel={cancelEdit}
+                                                            onSetCurrent={() => setEditEnd(formatTime(currentTime))}
+                                                        />
+
+                                                        {/* Duration indicator */}
+                                                        {(() => {
+                                                            const start = parseTime(editStart);
+                                                            const end = parseTime(editEnd);
+                                                            const duration = start && end ? end - start : null;
+                                                            const isInvalid = duration && duration <= 0;
+
+                                                            return (
+                                                                <div className="flex items-center gap-1.5 ml-10">
+                                                                    <span
+                                                                        className={`text-[10px] font-mono ${isInvalid ? 'text-red-400' : 'text-white/40'}`}
+                                                                    >
+                                                                        Durée: {duration ? (isInvalid ? 'invalide' : `${duration.toFixed(2)}s`) : '—'}
+                                                                    </span>
+                                                                </div>
+                                                            );
+                                                        })()}
+                                                    </div>
+
+                                                    <textarea
+                                                        value={editText}
+                                                        onChange={e => setEditText(e.target.value)}
+                                                        onKeyDown={e => {
+                                                            if (e.key === 'Enter' && !e.shiftKey) {
+                                                                e.preventDefault();
+                                                                saveEdit();
+                                                            }
+
+                                                            if (e.key === 'Escape') {
+                                                                cancelEdit();
+                                                            }
+                                                        }}
+                                                        rows={1}
+                                                        className="w-full [field-sizing:content] resize-none rounded border-none bg-white/10 px-2 py-1 text-xs leading-relaxed text-white outline-none focus:ring-1 focus:ring-inset focus:ring-primary"
+                                                    />
+                                                </div>
+                                            ) : (
+                                                <button
+                                                    ref={el => {
+                                                        if (el) {
+                                                            subtitleElRefs.current.set(sub.id, el);
+                                                        } else {
+                                                            subtitleElRefs.current.delete(sub.id);
+                                                        }
+                                                    }}
+                                                    key={sub.id}
+                                                    onClick={() => seekTo(sub.start)}
+                                                    onDoubleClick={() => startEditing(sub)}
+                                                    className={`w-full text-left px-4 py-3 border-b border-white/5 transition-all hover:bg-white/5 ${
+                                                        activeSubtitle?.id === sub.id ? 'bg-violet-500/10' : ''
+                                                    }`}
+                                                >
+                                                    <div className="flex items-center gap-2 mb-1">
+                                                        <span className="text-[10px] font-mono text-white/30">{formatTime(sub.start)}</span>
+                                                        <span className="text-[10px] text-white/20">&rarr;</span>
+                                                        <span className="text-[10px] font-mono text-white/30">{formatTime(sub.end)}</span>
+                                                    </div>
+                                                    <p
+                                                        className={`text-xs leading-relaxed ${activeSubtitle?.id === sub.id ? 'text-white' : 'text-white/60'}`}
+                                                    >
+                                                        {sub.text}
+                                                    </p>
+                                                </button>
+                                            )
+                                        )}
+                                    </div>
+                                    <div className="px-4 py-2">
+                                        <button
+                                            onClick={() => {
+                                                const start = currentTime;
+                                                const end = Math.min(start + 1, duration);
+
+                                                addNewSubtitle(start, end);
+                                            }}
+                                            className="flex w-full items-center justify-center gap-1.5 rounded-md bg-white/5 py-2 text-[11px] font-medium text-white/50 transition-all hover:bg-white/10 hover:text-white/80"
+                                            title="Ajouter un sous-titre"
+                                        >
+                                            <svg
+                                                className="h-3.5 w-3.5"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                                strokeWidth={2}
+                                            >
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    d="M12 4.5v15m7.5-7.5h-15"
+                                                />
+                                            </svg>
+                                            Ajouter
+                                        </button>
+                                    </div>
                                 </div>
                             )}
                         </div>

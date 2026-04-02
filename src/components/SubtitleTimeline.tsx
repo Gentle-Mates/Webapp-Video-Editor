@@ -102,6 +102,12 @@ const SubtitleBlock = memo(function SubtitleBlock(props: SubtitleBlockProps) {
     );
 });
 
+interface ContextMenuState {
+    x: number;
+    y: number;
+    time: number;
+}
+
 interface SubtitleTimelineProps {
     subtitles: Subtitle[];
     duration: number;
@@ -111,6 +117,7 @@ interface SubtitleTimelineProps {
     onSubtitleUpdate: (id: number, patch: Partial<Pick<Subtitle, 'start' | 'end'>>) => void;
     onSubtitleTextEdit: (sub: Subtitle) => void;
     onSubtitleDelete?: (id: number) => void;
+    onSubtitleAdd?: (start: number, end: number) => void;
 }
 
 export default function SubtitleTimeline({
@@ -121,7 +128,8 @@ export default function SubtitleTimeline({
     onSeek,
     onSubtitleUpdate,
     onSubtitleTextEdit,
-    onSubtitleDelete
+    onSubtitleDelete,
+    onSubtitleAdd
 }: SubtitleTimelineProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const ppsRef = useRef(80);
@@ -136,6 +144,23 @@ export default function SubtitleTimeline({
     const [isSeeking, setIsSeeking] = useState(false);
     const [scrollLeft, setScrollLeft] = useState(0);
     const [hoveredEdge, setHoveredEdge] = useState<{ id: number; edge: 'left' | 'right' } | null>(null);
+    const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+
+    useEffect(() => {
+        if (!contextMenu) {
+            return;
+        }
+
+        const close = () => setContextMenu(null);
+
+        document.addEventListener('click', close);
+        document.addEventListener('contextmenu', close);
+
+        return () => {
+            document.removeEventListener('click', close);
+            document.removeEventListener('contextmenu', close);
+        };
+    }, [contextMenu]);
 
     useEffect(() => {
         const minPps = (containerWidth - TIMELINE_PADDING) / duration;
@@ -486,6 +511,22 @@ export default function SubtitleTimeline({
         onSeek(getTimeFromClientX(e.clientX));
     };
 
+    const handleContextMenu = (e: MouseEvent<HTMLDivElement>) => {
+        if (!onSubtitleAdd) {
+            return;
+        }
+
+        e.preventDefault();
+
+        const time = getTimeFromClientX(e.clientX);
+
+        if (subtitles.some(sub => time >= sub.start && time <= sub.end)) {
+            return;
+        }
+
+        setContextMenu({ x: e.clientX, y: e.clientY, time });
+    };
+
     const handlePlayheadMouseDown = (e: MouseEvent<HTMLDivElement>) => {
         e.stopPropagation();
         e.preventDefault();
@@ -510,6 +551,7 @@ export default function SubtitleTimeline({
                 className="relative overflow-x-auto overflow-y-hidden scrollbar-dark"
                 style={{ height: RULER_HEIGHT + TRACK_HEIGHT + 20 }}
                 onClick={handleTimelineClick}
+                onContextMenu={handleContextMenu}
             >
                 <div
                     className="relative"
@@ -558,6 +600,40 @@ export default function SubtitleTimeline({
                     </div>
                 </div>
             </div>
+
+            {contextMenu && (
+                <div
+                    className="fixed z-50 min-w-45 rounded-lg border border-white/10 bg-[#1a1a1e] py-1 shadow-xl"
+                    style={{ left: contextMenu.x, top: contextMenu.y }}
+                    onClick={e => e.stopPropagation()}
+                >
+                    <button
+                        className="flex w-full items-center gap-2.5 px-3 py-2 text-xs text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+                        onClick={() => {
+                            const time = contextMenu.time;
+                            const next = [...subtitles].sort((a, b) => a.start - b.start).find(s => s.start > time);
+
+                            setContextMenu(null);
+                            onSubtitleAdd!(time, Math.min(time + 1, next ? next.start : duration));
+                        }}
+                    >
+                        <svg
+                            className="h-3.5 w-3.5"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                        >
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M12 4.5v15m7.5-7.5h-15"
+                            />
+                        </svg>
+                        Insérer un sous-titre
+                    </button>
+                </div>
+            )}
         </div>
     );
 }

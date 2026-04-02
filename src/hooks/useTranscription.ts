@@ -57,6 +57,14 @@ export default function useTranscription() {
         setSubtitles(prev => prev.map(sub => (sub.id === id ? { ...sub, ...patch } : sub)));
     }
 
+    function addSubtitle(start: number, end: number, text = '') {
+        setSubtitles(prev => {
+            const sub: Subtitle = { id: prev.reduce((max, sub) => Math.max(max, sub.id), 0) + 1, start, end, text };
+
+            return [...prev, sub].sort((a, b) => a.start - b.start);
+        });
+    }
+
     function deleteSubtitle(id: number) {
         setSubtitles(prev => prev.filter(sub => sub.id !== id));
     }
@@ -67,5 +75,5 @@ export default function useTranscription() {
         setError(null);
     }
 
-    return { status, subtitles, error, transcribe, reset, updateSubtitle, deleteSubtitle };
+    return { status, subtitles, error, transcribe, reset, updateSubtitle, addSubtitle, deleteSubtitle };
 }

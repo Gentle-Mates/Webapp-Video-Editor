@@ -69,6 +69,20 @@ export default function useTranslation() {
         }));
     }
 
+    function addTranslatedSubtitle(subtitle: Subtitle) {
+        setTranslations(prev => {
+            const next = { ...prev };
+
+            for (const mode of ['mix', 'fr', 'en'] as const) {
+                if (prev[mode].length > 0) {
+                    next[mode] = [...prev[mode], subtitle].sort((a, b) => a.start - b.start);
+                }
+            }
+
+            return next;
+        });
+    }
+
     function deleteTranslatedSubtitle(id: number) {
         setTranslations(prev => {
             const next = { ...prev };
@@ -87,5 +101,5 @@ export default function useTranslation() {
         setTranslations({ mix: [], fr: [], en: [] });
     }
 
-    return { translations, isTranslating, translate, syncTimings, updateTranslatedSubtitle, deleteTranslatedSubtitle, resetTranslations };
+    return { translations, isTranslating, translate, syncTimings, updateTranslatedSubtitle, addTranslatedSubtitle, deleteTranslatedSubtitle, resetTranslations };
 }
