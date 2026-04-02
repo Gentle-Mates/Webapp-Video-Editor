@@ -52,8 +52,11 @@ export default function Home() {
     const [editEnd, setEditEnd] = useState('');
     const [subtitleView, setSubtitleView] = useState<SubtitleView>('original');
 
-    const displayedSubtitles =
-        subtitleView === 'original' ? subtitles : translations[subtitleView].length > 0 ? translations[subtitleView] : subtitles;
+    const displayedSubtitles = useMemo(() => {
+        const subs = subtitleView === 'original' ? subtitles : translations[subtitleView].length > 0 ? translations[subtitleView] : subtitles;
+
+        return [...subs].sort((a, b) => a.start - b.start);
+    }, [subtitleView, subtitles, translations]);
     const activeSubtitle = displayedSubtitles.find(sub => currentTime >= sub.start && currentTime <= sub.end) ?? null;
 
     function toggleOverlayTrack(track: SubtitleView) {
@@ -910,7 +913,7 @@ export default function Home() {
                                             onSeek={seekTo}
                                             onSubtitleUpdate={handleTimelineSubtitleUpdate}
                                             onSubtitleTextEdit={startEditing}
-                                            onSubtitlesDelete={(ids) => ids.forEach(removeSubtitle)}
+                                            onSubtitlesDelete={ids => ids.forEach(removeSubtitle)}
                                             onSubtitleAdd={addNewSubtitle}
                                         />
                                     </div>
