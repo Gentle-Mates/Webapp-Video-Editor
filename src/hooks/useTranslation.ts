@@ -97,9 +97,29 @@ export default function useTranslation() {
         });
     }
 
+    function restoreTranslatedSubtitles(mapping: Partial<Record<TranslationMode, Subtitle>>) {
+        setTranslations(prev => {
+            const next = { ...prev };
+
+            for (const [mode, sub] of Object.entries(mapping)) {
+                if (sub) {
+                    const typedMode = mode as TranslationMode;
+
+                    if (prev[typedMode].some(s => s.id === sub.id)) {
+                        continue;
+                    }
+
+                    next[typedMode] = [...prev[typedMode], sub].sort((a, b) => a.start - b.start);
+                }
+            }
+
+            return next;
+        });
+    }
+
     function resetTranslations() {
         setTranslations({ mix: [], fr: [], en: [] });
     }
 
-    return { translations, isTranslating, translate, syncTimings, updateTranslatedSubtitle, addTranslatedSubtitle, deleteTranslatedSubtitle, resetTranslations };
+    return { translations, isTranslating, translate, syncTimings, updateTranslatedSubtitle, addTranslatedSubtitle, deleteTranslatedSubtitle, restoreTranslatedSubtitles, resetTranslations };
 }

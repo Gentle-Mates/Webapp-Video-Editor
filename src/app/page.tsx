@@ -124,7 +124,17 @@ export default function Home() {
     const subtitleElRefs = useRef<Map<number, HTMLElement>>(new Map());
     const exportMenuRef = useRef<HTMLDivElement>(null);
 
-    const { status, subtitles, error, transcribe, reset, updateSubtitle, addSubtitle, deleteSubtitle } = useTranscription();
+    const {
+        status,
+        subtitles,
+        error,
+        transcribe,
+        reset,
+        updateSubtitle,
+        addSubtitle,
+        deleteSubtitle,
+        restoreSubtitle
+    } = useTranscription();
     const {
         translations,
         isTranslating,
@@ -133,6 +143,7 @@ export default function Home() {
         updateTranslatedSubtitle,
         addTranslatedSubtitle,
         deleteTranslatedSubtitle,
+        restoreTranslatedSubtitles,
         resetTranslations
     } = useTranslation();
 
@@ -141,6 +152,11 @@ export default function Home() {
     const [editStart, setEditStart] = useState('');
     const [editEnd, setEditEnd] = useState('');
     const [subtitleView, setSubtitleView] = useState<SubtitleView>('original');
+
+    const [undoStack, setUndoStack] = useState<{
+        original: Subtitle;
+        translations: Partial<Record<TranslationMode, Subtitle>>;
+    }[]>([]);
 
     const tracks = (Object.keys(ALL_TRACKS) as SubtitleView[]).filter(track =>
         track === 'original' ? subtitles.length > 0 : translations[track].length > 0
@@ -288,14 +304,30 @@ export default function Home() {
         reset();
     }
 
-    function removeSubtitle(id: number) {
+    const removeSubtitle = useEffectEvent((id: number) => {
+        const original = subtitles.find(s => s.id === id);
+
+        if (original) {
+            const subtitleTranslations: Partial<Record<TranslationMode, Subtitle>> = {};
+
+            for (const mode of ['mix', 'fr', 'en'] as const) {
+                const trans = translations[mode].find(s => s.id === id);
+
+                if (trans) {
+                    subtitleTranslations[mode] = trans;
+                }
+            }
+
+            setUndoStack(prev => [...prev.slice(-49), { original, translations: subtitleTranslations }]);
+        }
+
         deleteSubtitle(id);
         deleteTranslatedSubtitle(id);
 
         if (editingId === id) {
             setEditingId(null);
         }
-    }
+    });
 
     function addNewSubtitle(start: number, end: number) {
         addSubtitle(start, end, '');
@@ -498,6 +530,18 @@ export default function Home() {
         };
     }, [isDragging, videoSrc]);
 
+    const handleUndo = useEffectEvent(() => {
+        if (undoStack.length === 0) {
+            return;
+        }
+
+        const lastDeleted = undoStack[undoStack.length - 1];
+
+        restoreSubtitle(lastDeleted.original);
+        restoreTranslatedSubtitles(lastDeleted.translations);
+        setUndoStack(prev => prev.slice(0, -1));
+    });
+
     const handleKeyDown = useEffectEvent((e: KeyboardEvent) => {
         if (!videoSrc || !videoRef.current) {
             return;
@@ -505,9 +549,18 @@ export default function Home() {
 
         const target = e.target as HTMLElement;
 
+        const isEditing = target.tagName === 'TEXTAREA' || target.tagName === 'INPUT';
+
+        if ((e.ctrlKey || e.metaKey) && (e.code === 'KeyZ' || e.key === 'z' || e.key === 'Z') && !isEditing) {
+            e.preventDefault();
+            handleUndo();
+
+            return;
+        }
+
         if (
             (e.code === 'ArrowUp' || e.code === 'ArrowDown') &&
-            !(target.tagName === 'TEXTAREA' || target.tagName === 'INPUT') &&
+            !isEditing &&
             displayedSubtitles.length > 0
         ) {
             e.preventDefault();
@@ -1216,6 +1269,10 @@ export default function Home() {
                                     <span className="flex items-center gap-1.5">
                                         <kbd className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-white/40">&rarr;</kbd>
                                         <span>+5s</span>
+                                    </span>
+                                    <span className="flex items-center gap-1.5">
+                                        <kbd className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-white/40">Ctrl + Z</kbd>
+                                        <span>Undo</span>
                                     </span>
                                 </div>
                             </div>

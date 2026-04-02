@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { extractAudioFromVideo } from '@/utils/audio';
 import type { Subtitle, TranscriptionStatus } from '@/utils/types';
@@ -8,10 +8,13 @@ export default function useTranscription() {
     const [subtitles, setSubtitles] = useState<Subtitle[]>([]);
     const [error, setError] = useState<string | null>(null);
 
+    const nextId = useRef(1);
+
     async function transcribe(file: File) {
         setStatus('extracting');
         setError(null);
         setSubtitles([]);
+        nextId.current = 1;
 
         try {
             const formData = new FormData();
@@ -46,6 +49,7 @@ export default function useTranscription() {
             }));
 
             setSubtitles(subs);
+            nextId.current = subs.length + 1;
             setStatus('done');
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Unknown error');
@@ -58,22 +62,31 @@ export default function useTranscription() {
     }
 
     function addSubtitle(start: number, end: number, text = '') {
-        setSubtitles(prev => {
-            const sub: Subtitle = { id: prev.reduce((max, sub) => Math.max(max, sub.id), 0) + 1, start, end, text };
+        const sub: Subtitle = { id: nextId.current++, start, end, text };
 
-            return [...prev, sub].sort((a, b) => a.start - b.start);
-        });
+        setSubtitles(prev => [...prev, sub].sort((a, b) => a.start - b.start));
     }
 
     function deleteSubtitle(id: number) {
         setSubtitles(prev => prev.filter(sub => sub.id !== id));
     }
 
+    function restoreSubtitle(subtitle: Subtitle) {
+        setSubtitles(prev => {
+            if (prev.some(s => s.id === subtitle.id)) {
+                return prev;
+            }
+
+            return [...prev, subtitle].sort((a, b) => a.start - b.start);
+        });
+    }
+
     function reset() {
         setStatus('idle');
         setSubtitles([]);
+        nextId.current = 1;
         setError(null);
     }
 
-    return { status, subtitles, error, transcribe, reset, updateSubtitle, addSubtitle, deleteSubtitle };
+    return { status, subtitles, error, transcribe, reset, updateSubtitle, addSubtitle, deleteSubtitle, restoreSubtitle };
 }
