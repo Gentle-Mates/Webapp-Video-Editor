@@ -957,13 +957,10 @@ export default function Home() {
                                                     <div className="absolute bottom-full right-0 z-20 mb-2 min-w-40 rounded-xl border border-white/10 bg-[#141416] p-1.5 shadow-xl">
                                                         <button
                                                             onClick={() =>
-                                                                setTimelineTracks({
-                                                                    showCurrent: true,
-                                                                    original: false,
-                                                                    mix: false,
-                                                                    fr: false,
-                                                                    en: false
-                                                                })
+                                                                setTimelineTracks(prev => ({
+                                                                    ...prev,
+                                                                    showCurrent: !prev.showCurrent
+                                                                }))
                                                             }
                                                             className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium transition-all hover:bg-white/5 ${
                                                                 timelineTracks.showCurrent ? 'text-secondary' : 'text-white/50 hover:text-white/80'
@@ -1077,13 +1074,10 @@ export default function Home() {
                                                     <div className="absolute bottom-full right-0 z-20 mb-2 min-w-40 rounded-xl border border-white/10 bg-[#141416] p-1.5 shadow-xl">
                                                         <button
                                                             onClick={() =>
-                                                                setOverlayTracks({
-                                                                    showCurrent: true,
-                                                                    original: false,
-                                                                    mix: false,
-                                                                    fr: false,
-                                                                    en: false
-                                                                })
+                                                                setOverlayTracks(prev => ({
+                                                                    ...prev,
+                                                                    showCurrent: !prev.showCurrent
+                                                                }))
                                                             }
                                                             className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium transition-all hover:bg-white/5 ${
                                                                 overlayTracks.showCurrent ? 'text-secondary' : 'text-white/50 hover:text-white/80'
