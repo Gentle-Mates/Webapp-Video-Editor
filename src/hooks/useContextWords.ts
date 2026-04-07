@@ -1,33 +1,28 @@
 import { useState } from 'react';
 
-import config from '../../config.json';
-
 const MAX_WORDS = 100;
 
-export default function useContextWords() {
-    const [defaultWords] = useState<string[]>(config.contextWords ?? []);
+export default function useContextWords(initialWords: string[]) {
     const [removedDefaults, setRemovedDefaults] = useState<Set<string>>(new Set());
     const [customWords, setCustomWords] = useState<string[]>([]);
 
-    const activeDefaults = defaultWords.filter(w => !removedDefaults.has(w));
+    const activeDefaults = initialWords.filter(w => !removedDefaults.has(w));
     const words = [...activeDefaults, ...customWords];
 
     function addWord(word: string) {
         const trimmed = word.trim().replace(/\s+/g, '');
 
-        if (!trimmed || words.length >= MAX_WORDS) {
+        if (!trimmed || words.length >= MAX_WORDS || words.some(w => w.toLowerCase() === trimmed.toLowerCase())) {
             return false;
         }
 
-        if (words.some(w => w.toLowerCase() === trimmed.toLowerCase())) {
-            return false;
-        }
+        const matchingDefault = initialWords.find(w => w.toLowerCase() === trimmed.toLowerCase());
 
-        if (removedDefaults.has(trimmed)) {
+        if (matchingDefault && removedDefaults.has(matchingDefault)) {
             setRemovedDefaults(prev => {
                 const next = new Set(prev);
 
-                next.delete(trimmed);
+                next.delete(matchingDefault);
 
                 return next;
             });
@@ -39,7 +34,7 @@ export default function useContextWords() {
     }
 
     function removeWord(word: string) {
-        if (defaultWords.includes(word)) {
+        if (initialWords.includes(word)) {
             setRemovedDefaults(prev => new Set(prev).add(word));
         } else {
             setCustomWords(prev => prev.filter(w => w !== word));
@@ -52,7 +47,7 @@ export default function useContextWords() {
     }
 
     function isDefault(word: string) {
-        return defaultWords.includes(word);
+        return initialWords.includes(word);
     }
 
     return { words, addWord, removeWord, resetWords, isDefault, maxWords: MAX_WORDS };
