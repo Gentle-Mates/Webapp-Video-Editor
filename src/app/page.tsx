@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useEffectEvent, useMemo } from 'react';
 import { signOut } from 'next-auth/react';
-import { SlidersHorizontal } from 'lucide-react';
+import { SlidersHorizontal, Settings } from 'lucide-react';
 import type { DragEvent, ChangeEvent } from 'react';
 
 import { ALL_TRACKS } from '@/components/Tracks';
@@ -13,9 +13,11 @@ import type { Subtitle, SubtitleView, TranslationMode, SubtitleTrack } from '@/u
 import ScrubInput from '@/components/ScrubInput';
 import SubtitleTimeline from '@/components/SubtitleTimeline';
 import ContextWordsModal from '@/components/ContextWordsModal';
+import SettingsModal from '@/components/SettingsModal';
 import useTranscription from '@/hooks/useTranscription';
 import useTranslation from '@/hooks/useTranslation';
 import useContextWords from '@/hooks/useContextWords';
+import useSettings from '@/hooks/useSettings';
 
 export default function Home() {
     const [videoSrc, setVideoSrc] = useState<string | null>(null);
@@ -43,6 +45,7 @@ export default function Home() {
     const [showTimelineMenu, setShowTimelineMenu] = useState(false);
     const [showExportMenu, setShowExportMenu] = useState(false);
     const [showContextModal, setShowContextModal] = useState(false);
+    const [showSettingsModal, setShowSettingsModal] = useState(false);
     const [exportSelection, setExportSelection] = useState<Record<SubtitleView, boolean>>({
         original: true,
         mix: true,
@@ -59,7 +62,9 @@ export default function Home() {
     const exportMenuRef = useRef<HTMLDivElement>(null);
 
     const { status, subtitles, error, transcribe, reset, updateSubtitle, addSubtitle, deleteSubtitle, restoreSubtitle } = useTranscription();
-    const { words: contextWords, addWord, removeWord, resetWords, maxWords } = useContextWords();
+    const { settings, saving: settingsSaving, updateSettings } = useSettings();
+    const settingsContextWords = useMemo(() => settings?.contextWords ?? [], [settings?.contextWords]);
+    const { words: contextWords, addWord, removeWord, resetWords, maxWords } = useContextWords(settingsContextWords);
     const {
         translations,
         isTranslating,
@@ -641,6 +646,13 @@ export default function Home() {
                     <div />
                 )}
                 <div className="flex items-center justify-end gap-3">
+                    <button
+                        onClick={() => setShowSettingsModal(true)}
+                        className="flex items-center gap-1.5 rounded-md bg-white/5 px-2.5 py-1.5 text-[11px] font-medium text-white/90 transition-all hover:bg-white/10"
+                    >
+                        <Settings className="h-3.5 w-3.5" />
+                        Settings
+                    </button>
                     <button
                         onClick={() => signOut()}
                         className="flex items-center gap-1.5 rounded-md bg-white/5 px-2.5 py-1.5 text-[11px] font-medium text-white/90 transition-all hover:bg-white/10"
@@ -1675,6 +1687,16 @@ export default function Home() {
                     onAdd={addWord}
                     onRemove={removeWord}
                     onClose={() => setShowContextModal(false)}
+                />
+            )}
+
+            {showSettingsModal && settings && (
+                <SettingsModal
+                    allowedEmails={settings.allowedEmails}
+                    contextWords={settings.contextWords}
+                    saving={settingsSaving}
+                    onUpdate={updateSettings}
+                    onClose={() => setShowSettingsModal(false)}
                 />
             )}
         </div>
