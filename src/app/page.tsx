@@ -2,17 +2,20 @@
 
 import { useState, useRef, useEffect, useEffectEvent, useMemo } from 'react';
 import { signOut } from 'next-auth/react';
+import { SlidersHorizontal } from 'lucide-react';
 import type { DragEvent, ChangeEvent } from 'react';
-import type { Subtitle, SubtitleView, TranslationMode, SubtitleTrack } from '@/utils/types';
 
 import { ALL_TRACKS } from '@/components/Tracks';
 import { generateSRT, downloadSRT } from '@/utils/srt';
 import { formatTime, parseTime } from '@/utils/time';
+import type { Subtitle, SubtitleView, TranslationMode, SubtitleTrack } from '@/utils/types';
 
 import ScrubInput from '@/components/ScrubInput';
 import SubtitleTimeline from '@/components/SubtitleTimeline';
+import ContextWordsModal from '@/components/ContextWordsModal';
 import useTranscription from '@/hooks/useTranscription';
 import useTranslation from '@/hooks/useTranslation';
+import useContextWords from '@/hooks/useContextWords';
 
 export default function Home() {
     const [videoSrc, setVideoSrc] = useState<string | null>(null);
@@ -39,6 +42,7 @@ export default function Home() {
     });
     const [showTimelineMenu, setShowTimelineMenu] = useState(false);
     const [showExportMenu, setShowExportMenu] = useState(false);
+    const [showContextModal, setShowContextModal] = useState(false);
     const [exportSelection, setExportSelection] = useState<Record<SubtitleView, boolean>>({
         original: true,
         mix: true,
@@ -55,6 +59,7 @@ export default function Home() {
     const exportMenuRef = useRef<HTMLDivElement>(null);
 
     const { status, subtitles, error, transcribe, reset, updateSubtitle, addSubtitle, deleteSubtitle, restoreSubtitle } = useTranscription();
+    const { words: contextWords, addWord, removeWord, resetWords, maxWords } = useContextWords();
     const {
         translations,
         isTranslating,
@@ -204,6 +209,7 @@ export default function Home() {
             setIsPlaying(false);
             setCurrentTime(0);
             resetTranslations();
+            resetWords();
             setSubtitleView('original');
             reset();
         }
@@ -223,6 +229,7 @@ export default function Home() {
         setEditingId(null);
         setSubtitleView('original');
         resetTranslations();
+        resetWords();
         reset();
     }
 
@@ -360,7 +367,7 @@ export default function Home() {
         if (videoFile) {
             resetTranslations();
             setSubtitleView('original');
-            transcribe(videoFile).then(() => {});
+            transcribe(videoFile, contextWords).then(() => {});
         }
     }
 
@@ -1271,6 +1278,13 @@ export default function Home() {
                                                 )}
                                             </div>
                                             <button
+                                                onClick={() => setShowContextModal(true)}
+                                                className="flex items-center gap-1.5 rounded-md bg-white/5 px-2.5 py-1.5 text-[10px] font-medium text-white/60 transition-all hover:bg-white/10 hover:text-white"
+                                                title="Mots de contexte"
+                                            >
+                                                <SlidersHorizontal className="h-4 w-4" />
+                                            </button>
+                                            <button
                                                 onClick={handleReload}
                                                 disabled={isTranslating}
                                                 className="flex items-center gap-1.5 rounded-md bg-white/5 px-2.5 py-1.5 text-[10px] font-medium text-white/60 transition-all hover:bg-white/10 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed"
@@ -1424,25 +1438,34 @@ export default function Home() {
                             {/* Idle state */}
                             {status === 'idle' && (
                                 <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6">
-                                    <button
-                                        onClick={handleTranscribe}
-                                        className="flex items-center gap-2 rounded-lg bg-primary/85 px-6 py-2.5 text-sm font-medium text-white transition-all hover:bg-primary"
-                                    >
-                                        <svg
-                                            className="h-4 w-4"
-                                            fill="none"
-                                            viewBox="0 0 24 24"
-                                            stroke="currentColor"
-                                            strokeWidth={2}
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={handleTranscribe}
+                                            className="flex items-center gap-2 rounded-lg bg-primary/85 px-6 py-2.5 text-sm font-medium text-white transition-all hover:bg-primary"
                                         >
-                                            <path
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z"
-                                            />
-                                        </svg>
-                                        Générer les sous-titres
-                                    </button>
+                                            <svg
+                                                className="h-4 w-4"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                                strokeWidth={2}
+                                            >
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z"
+                                                />
+                                            </svg>
+                                            Générer les sous-titres
+                                        </button>
+                                        <button
+                                            onClick={() => setShowContextModal(true)}
+                                            className="flex items-center justify-center rounded-lg bg-white/5 p-2.5 text-white/60 transition-all hover:bg-white/10 hover:text-white"
+                                            title="Mots de contexte"
+                                        >
+                                            <SlidersHorizontal className="h-4 w-4" />
+                                        </button>
+                                    </div>
                                 </div>
                             )}
 
@@ -1644,6 +1667,16 @@ export default function Home() {
                     </div>
                 )}
             </main>
+
+            {showContextModal && (
+                <ContextWordsModal
+                    words={contextWords}
+                    maxWords={maxWords}
+                    onAdd={addWord}
+                    onRemove={removeWord}
+                    onClose={() => setShowContextModal(false)}
+                />
+            )}
         </div>
     );
 }

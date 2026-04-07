@@ -10,7 +10,7 @@ export default function useTranscription() {
 
     const nextId = useRef(1);
 
-    async function transcribe(file: File) {
+    async function transcribe(file: File, contextWords?: string[]) {
         setStatus('extracting');
         setError(null);
         setSubtitles([]);
@@ -20,6 +20,10 @@ export default function useTranscription() {
             const formData = new FormData();
 
             formData.append('file', await extractAudioFromVideo(file));
+
+            if (contextWords && contextWords.length > 0) {
+                formData.append('context_bias', JSON.stringify(contextWords));
+            }
 
             setStatus('uploading');
 
