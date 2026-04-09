@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { X } from 'lucide-react';
 
 interface ContextWordsModalProps {
     words: string[];
@@ -28,19 +29,7 @@ export default function ContextWordsModal({ words, maxWords, onAdd, onRemove, on
                         onClick={onClose}
                         className="rounded-lg p-1.5 text-white/40 transition-all hover:bg-white/5 hover:text-white"
                     >
-                        <svg
-                            className="h-4 w-4"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth={2}
-                        >
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                d="M6 18L18 6M6 6l12 12"
-                            />
-                        </svg>
+                        <X className="h-4 w-4" />
                     </button>
                 </div>
                 <p className="mb-4 text-xs text-white/40">Aide la transcription a mieux reconnaître ces mots.</p>
@@ -82,19 +71,7 @@ export default function ContextWordsModal({ words, maxWords, onAdd, onRemove, on
                                 onClick={() => onRemove(word)}
                                 className="ml-0.5 rounded-full p-0.5 text-white/30 transition-all hover:bg-white/10 hover:text-red-400"
                             >
-                                <svg
-                                    className="h-2.5 w-2.5"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor"
-                                    strokeWidth={2.5}
-                                >
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        d="M6 18L18 6M6 6l12 12"
-                                    />
-                                </svg>
+                                <X className="h-2.5 w-2.5" strokeWidth={2.5} />
                             </button>
                         </div>
                     ))}

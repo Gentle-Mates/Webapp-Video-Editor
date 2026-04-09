@@ -1,4 +1,5 @@
 import { useRef, useState, type MouseEvent } from 'react';
+import { ChevronLeft, ChevronRight, Clock } from 'lucide-react';
 
 import { formatTime, parseTime } from '@/utils/time';
 
@@ -113,24 +114,12 @@ export default function ScrubInput({ value, onChange, onCommit, onCancel, label,
                         <div
                             className={`absolute inset-y-0 left-0.5 flex items-center pointer-events-none transition-opacity ${isDragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-60'}`}
                         >
-                            <svg
-                                className="h-2.5 w-2.5 text-white/50"
-                                fill="currentColor"
-                                viewBox="0 0 24 24"
-                            >
-                                <path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z" />
-                            </svg>
+                            <ChevronLeft className="h-2.5 w-2.5 text-white/50" />
                         </div>
                         <div
                             className={`absolute inset-y-0 right-0.5 flex items-center pointer-events-none transition-opacity ${isDragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-60'}`}
                         >
-                            <svg
-                                className="h-2.5 w-2.5 text-white/50"
-                                fill="currentColor"
-                                viewBox="0 0 24 24"
-                            >
-                                <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z" />
-                            </svg>
+                            <ChevronRight className="h-2.5 w-2.5 text-white/50" />
                         </div>
                     </>
                 )}
@@ -141,19 +130,7 @@ export default function ScrubInput({ value, onChange, onCommit, onCancel, label,
                 className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-white/10 text-white/40 transition-all hover:bg-white/15 hover:text-white/70"
                 title="Utiliser le temps actuel"
             >
-                <svg
-                    className="h-3 w-3"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                >
-                    <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                </svg>
+                <Clock className="h-3 w-3" />
             </button>
         </div>
     );
