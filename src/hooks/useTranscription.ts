@@ -43,9 +43,7 @@ export default function useTranscription() {
 
             setStatus('transcribing');
 
-            const data = await response.json();
-
-            const subs: Subtitle[] = data.segments.map((seg: { start: number; end: number; text: string }, i: number) => ({
+            const subs: Subtitle[] = (await response.json()).map((seg: { start: number; end: number; text: string }, i: number) => ({
                 id: i + 1,
                 start: seg.start,
                 end: seg.end,
