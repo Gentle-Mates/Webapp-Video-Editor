@@ -1,7 +1,7 @@
 import { auth } from '@/lib/auth';
 import { signToken } from '@/lib/jwt';
 
-const API_URL = process.env.API_URL!;
+const API_URL = process.env.NEXT_PUBLIC_API_URL!;
 
 async function GET() {
     const session = await auth();

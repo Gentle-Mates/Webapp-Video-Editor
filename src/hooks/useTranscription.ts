@@ -3,6 +3,8 @@ import { useRef, useState } from 'react';
 import { extractAudioFromVideo } from '@/utils/audio';
 import type { Subtitle, TranscriptionStatus } from '@/utils/types';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL!;
+
 export default function useTranscription() {
     const [status, setStatus] = useState<TranscriptionStatus>('idle');
     const [subtitles, setSubtitles] = useState<Subtitle[]>([]);
@@ -17,6 +19,19 @@ export default function useTranscription() {
         nextId.current = 1;
 
         try {
+            const validateResponse = await fetch('/api/transcription/validate');
+
+            if (!validateResponse.ok) {
+                const data = await validateResponse.json();
+
+                setError(data.error || 'Unauthorized');
+                setStatus('error');
+
+                return;
+            }
+
+            const { token } = await validateResponse.json();
+
             const formData = new FormData();
 
             formData.append('file', await extractAudioFromVideo(file));
@@ -27,8 +42,9 @@ export default function useTranscription() {
 
             setStatus('uploading');
 
-            const response = await fetch('/api/transcription', {
+            const response = await fetch(`${API_URL}/transcription`, {
                 method: 'POST',
+                headers: { Authorization: `Bearer ${token}` },
                 body: formData
             });
 

@@ -10,4 +10,12 @@ async function signToken(email: string): Promise<string> {
         .sign(secret);
 }
 
-export { signToken }
+async function signTranscriptionToken(email: string): Promise<string> {
+    return new SignJWT({ email, scope: 'transcription' })
+        .setProtectedHeader({ alg: 'HS256' })
+        .setIssuedAt()
+        .setExpirationTime('5m')
+        .sign(secret);
+}
+
+export { signToken, signTranscriptionToken }

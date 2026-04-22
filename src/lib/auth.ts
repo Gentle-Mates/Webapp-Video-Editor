@@ -1,7 +1,7 @@
 import NextAuth from 'next-auth';
 import Google from 'next-auth/providers/google';
 
-const API_URL = process.env.API_URL!;
+const API_URL = process.env.NEXT_PUBLIC_API_URL!;
 
 async function emailAllowed(email: string): Promise<boolean> {
     try {
