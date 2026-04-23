@@ -5,11 +5,14 @@ import type { Subtitle, TranslationMode } from '@/utils/types';
 export default function useTranslation() {
     const [translations, setTranslations] = useState<Record<TranslationMode, Subtitle[]>>({ mix: [], fr: [], en: [] });
     const [isTranslating, setIsTranslating] = useState(false);
+    const [translationError, setTranslationError] = useState<string | null>(null);
 
     async function translate(subtitles: Subtitle[], mode: TranslationMode, forceRefresh = false): Promise<boolean> {
         if (subtitles.length === 0 || isTranslating) {
             return false;
         }
+
+        setTranslationError(null);
 
         if (!forceRefresh && translations[mode].length > 0) {
             return true;
@@ -25,7 +28,9 @@ export default function useTranslation() {
             });
 
             if (!response.ok) {
-                console.error('Translation error:', response.status);
+                const data = await response.json().catch(() => ({ error: 'Erreur de traduction' }));
+
+                setTranslationError(data.error || 'Erreur de traduction');
 
                 return false;
             }
@@ -37,6 +42,8 @@ export default function useTranslation() {
             return true;
         } catch (err) {
             console.error('Translation error:', err);
+
+            setTranslationError(err instanceof Error ? err.message : 'Erreur de traduction');
 
             return false;
         } finally {
@@ -119,11 +126,13 @@ export default function useTranslation() {
 
     function resetTranslations() {
         setTranslations({ mix: [], fr: [], en: [] });
+        setTranslationError(null);
     }
 
     return {
         translations,
         isTranslating,
+        translationError,
         translate,
         syncTimings,
         updateTranslatedSubtitle,

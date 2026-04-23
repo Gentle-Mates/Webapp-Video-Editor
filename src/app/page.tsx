@@ -90,6 +90,7 @@ export default function Home() {
     const {
         translations,
         isTranslating,
+        translationError,
         translate,
         syncTimings,
         updateTranslatedSubtitle,
@@ -1251,148 +1252,172 @@ export default function Home() {
                                 </div>
                             )}
 
-                            {/* Subtitles list */}
-                            {status === 'done' && !isTranslating && displayedSubtitles.length > 0 && (
-                                <div className="flex flex-1 flex-col overflow-hidden">
-                                    <div
-                                        ref={subtitleListRef}
-                                        className="flex-1 overflow-y-auto scrollbar-dark"
+                            {/* Translation error state */}
+                            {!isTranslating && subtitleView !== 'original' && translationError && (
+                                <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6">
+                                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-500/10">
+                                        <AlertCircle className="h-6 w-6 text-red-400" />
+                                    </div>
+                                    <div className="text-center">
+                                        <p className="text-sm font-medium text-red-400">Erreur de traduction</p>
+                                        <p className="mt-1 text-xs text-white/40">{translationError}</p>
+                                    </div>
+                                    <button
+                                        onClick={() => handleTranslate(subtitleView, true)}
+                                        className="mt-2 flex items-center gap-2 rounded-full bg-red-500/10 px-5 py-2.5 text-sm font-medium text-red-400 transition-all hover:bg-red-500/20"
                                     >
-                                        {displayedSubtitles.map(sub =>
-                                            editingId === sub.id ? (
-                                                <div
-                                                    ref={el => {
-                                                        editContainerRef.current = el;
-
-                                                        if (el) {
-                                                            subtitleElRefs.current.set(sub.id, el);
-                                                        } else {
-                                                            subtitleElRefs.current.delete(sub.id);
-                                                        }
-                                                    }}
-                                                    key={sub.id}
-                                                    className="w-full px-4 py-3 border-b border-white/5 bg-violet-500/10"
-                                                >
-                                                    {/* Time editing */}
-                                                    <div className="flex flex-col gap-1.5 mb-2">
-                                                        <div className="flex items-center gap-2">
-                                                            <ScrubInput
-                                                                label="Début"
-                                                                value={editStart}
-                                                                onChange={setEditStart}
-                                                                onCommit={saveEdit}
-                                                                onCancel={cancelEdit}
-                                                                onSetCurrent={() => setEditStart(formatTime(currentTime))}
-                                                            />
-                                                            <div className="ml-auto flex items-center gap-1.5">
-                                                                <button
-                                                                    onClick={() => removeSubtitle(sub.id)}
-                                                                    className="flex h-6 w-6 items-center justify-center rounded-md text-white/40 transition-all hover:bg-red-500/15 hover:text-red-400"
-                                                                    title="Supprimer le sous-titre"
-                                                                >
-                                                                    <Trash2 className="size-3.5" />
-                                                                </button>
-                                                                <button
-                                                                    onClick={cancelEdit}
-                                                                    className="h-6 rounded bg-red-600 px-2.5 text-[10px] font-medium text-white transition-all hover:bg-red-500"
-                                                                >
-                                                                    Annuler
-                                                                </button>
-                                                            </div>
-                                                        </div>
-
-                                                        <ScrubInput
-                                                            label="Fin"
-                                                            value={editEnd}
-                                                            onChange={setEditEnd}
-                                                            onCommit={saveEdit}
-                                                            onCancel={cancelEdit}
-                                                            onSetCurrent={() => setEditEnd(formatTime(currentTime))}
-                                                        />
-
-                                                        {/* Duration indicator */}
-                                                        {(() => {
-                                                            const start = parseTime(editStart);
-                                                            const end = parseTime(editEnd);
-                                                            const duration = start && end ? end - start : null;
-                                                            const isInvalid = duration && duration <= 0;
-
-                                                            return (
-                                                                <div className="flex items-center gap-1.5 ml-10">
-                                                                    <span
-                                                                        className={`text-[10px] font-mono ${isInvalid ? 'text-red-400' : 'text-white/40'}`}
-                                                                    >
-                                                                        Durée: {duration ? (isInvalid ? 'invalide' : `${duration.toFixed(2)}s`) : '—'}
-                                                                    </span>
-                                                                </div>
-                                                            );
-                                                        })()}
-                                                    </div>
-
-                                                    <textarea
-                                                        value={editText}
-                                                        onChange={e => setEditText(e.target.value)}
-                                                        onKeyDown={e => {
-                                                            if (e.key === 'Enter' && !e.shiftKey) {
-                                                                e.preventDefault();
-                                                                saveEdit();
-                                                            }
-
-                                                            if (e.key === 'Escape') {
-                                                                cancelEdit();
-                                                            }
-                                                        }}
-                                                        rows={1}
-                                                        className="w-full field-sizing-content resize-none rounded border-none bg-white/10 px-2 py-1 text-xs leading-relaxed text-white outline-none focus:ring-1 focus:ring-inset focus:ring-primary"
-                                                    />
-                                                </div>
-                                            ) : (
-                                                <button
-                                                    ref={el => {
-                                                        if (el) {
-                                                            subtitleElRefs.current.set(sub.id, el);
-                                                        } else {
-                                                            subtitleElRefs.current.delete(sub.id);
-                                                        }
-                                                    }}
-                                                    key={sub.id}
-                                                    onClick={() => seekTo(sub.start)}
-                                                    onDoubleClick={() => startEditing(sub)}
-                                                    className={`w-full text-left px-4 py-3 border-b border-white/5 transition-all hover:bg-white/5 ${
-                                                        activeSubtitle?.id === sub.id ? 'bg-violet-500/10' : ''
-                                                    }`}
-                                                >
-                                                    <div className="flex items-center gap-2 mb-1">
-                                                        <span className="text-[10px] font-mono text-white/30">{formatTime(sub.start)}</span>
-                                                        <span className="text-[10px] text-white/20">&rarr;</span>
-                                                        <span className="text-[10px] font-mono text-white/30">{formatTime(sub.end)}</span>
-                                                    </div>
-                                                    <p
-                                                        className={`text-xs leading-relaxed ${activeSubtitle?.id === sub.id ? 'text-white' : 'text-white/60'}`}
-                                                    >
-                                                        {sub.text}
-                                                    </p>
-                                                </button>
-                                            )
-                                        )}
-                                    </div>
-                                    <div className="px-4 py-2">
-                                        <button
-                                            onClick={() => {
-                                                const start = currentTime;
-                                                const end = Math.min(start + 1, duration);
-
-                                                addNewSubtitle(start, end);
-                                            }}
-                                            className="flex w-full items-center justify-center gap-1.5 rounded-md bg-white/5 py-2 text-[11px] font-medium text-white/50 transition-all hover:bg-white/10 hover:text-white/80"
-                                            title="Ajouter un sous-titre"
-                                        >
-                                            <Plus className="h-3.5 w-3.5" />
-                                            Ajouter
-                                        </button>
-                                    </div>
+                                        <RefreshCw className="h-4 w-4" />
+                                        Réessayer
+                                    </button>
                                 </div>
                             )}
+
+                            {/* Subtitles list */}
+                            {status === 'done' &&
+                                !isTranslating &&
+                                !(subtitleView !== 'original' && translationError) &&
+                                displayedSubtitles.length > 0 && (
+                                    <div className="flex flex-1 flex-col overflow-hidden">
+                                        <div
+                                            ref={subtitleListRef}
+                                            className="flex-1 overflow-y-auto scrollbar-dark"
+                                        >
+                                            {displayedSubtitles.map(sub =>
+                                                editingId === sub.id ? (
+                                                    <div
+                                                        ref={el => {
+                                                            editContainerRef.current = el;
+
+                                                            if (el) {
+                                                                subtitleElRefs.current.set(sub.id, el);
+                                                            } else {
+                                                                subtitleElRefs.current.delete(sub.id);
+                                                            }
+                                                        }}
+                                                        key={sub.id}
+                                                        className="w-full px-4 py-3 border-b border-white/5 bg-violet-500/10"
+                                                    >
+                                                        {/* Time editing */}
+                                                        <div className="flex flex-col gap-1.5 mb-2">
+                                                            <div className="flex items-center gap-2">
+                                                                <ScrubInput
+                                                                    label="Début"
+                                                                    value={editStart}
+                                                                    onChange={setEditStart}
+                                                                    onCommit={saveEdit}
+                                                                    onCancel={cancelEdit}
+                                                                    onSetCurrent={() => setEditStart(formatTime(currentTime))}
+                                                                />
+                                                                <div className="ml-auto flex items-center gap-1.5">
+                                                                    <button
+                                                                        onClick={() => removeSubtitle(sub.id)}
+                                                                        className="flex h-6 w-6 items-center justify-center rounded-md text-white/40 transition-all hover:bg-red-500/15 hover:text-red-400"
+                                                                        title="Supprimer le sous-titre"
+                                                                    >
+                                                                        <Trash2 className="size-3.5" />
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={cancelEdit}
+                                                                        className="h-6 rounded bg-red-600 px-2.5 text-[10px] font-medium text-white transition-all hover:bg-red-500"
+                                                                    >
+                                                                        Annuler
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+
+                                                            <ScrubInput
+                                                                label="Fin"
+                                                                value={editEnd}
+                                                                onChange={setEditEnd}
+                                                                onCommit={saveEdit}
+                                                                onCancel={cancelEdit}
+                                                                onSetCurrent={() => setEditEnd(formatTime(currentTime))}
+                                                            />
+
+                                                            {/* Duration indicator */}
+                                                            {(() => {
+                                                                const start = parseTime(editStart);
+                                                                const end = parseTime(editEnd);
+                                                                const duration = start && end ? end - start : null;
+                                                                const isInvalid = duration && duration <= 0;
+
+                                                                return (
+                                                                    <div className="flex items-center gap-1.5 ml-10">
+                                                                        <span
+                                                                            className={`text-[10px] font-mono ${isInvalid ? 'text-red-400' : 'text-white/40'}`}
+                                                                        >
+                                                                            Durée:{' '}
+                                                                            {duration ? (isInvalid ? 'invalide' : `${duration.toFixed(2)}s`) : '—'}
+                                                                        </span>
+                                                                    </div>
+                                                                );
+                                                            })()}
+                                                        </div>
+
+                                                        <textarea
+                                                            value={editText}
+                                                            onChange={e => setEditText(e.target.value)}
+                                                            onKeyDown={e => {
+                                                                if (e.key === 'Enter' && !e.shiftKey) {
+                                                                    e.preventDefault();
+                                                                    saveEdit();
+                                                                }
+
+                                                                if (e.key === 'Escape') {
+                                                                    cancelEdit();
+                                                                }
+                                                            }}
+                                                            rows={1}
+                                                            className="w-full field-sizing-content resize-none rounded border-none bg-white/10 px-2 py-1 text-xs leading-relaxed text-white outline-none focus:ring-1 focus:ring-inset focus:ring-primary"
+                                                        />
+                                                    </div>
+                                                ) : (
+                                                    <button
+                                                        ref={el => {
+                                                            if (el) {
+                                                                subtitleElRefs.current.set(sub.id, el);
+                                                            } else {
+                                                                subtitleElRefs.current.delete(sub.id);
+                                                            }
+                                                        }}
+                                                        key={sub.id}
+                                                        onClick={() => seekTo(sub.start)}
+                                                        onDoubleClick={() => startEditing(sub)}
+                                                        className={`w-full text-left px-4 py-3 border-b border-white/5 transition-all hover:bg-white/5 ${
+                                                            activeSubtitle?.id === sub.id ? 'bg-violet-500/10' : ''
+                                                        }`}
+                                                    >
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <span className="text-[10px] font-mono text-white/30">{formatTime(sub.start)}</span>
+                                                            <span className="text-[10px] text-white/20">&rarr;</span>
+                                                            <span className="text-[10px] font-mono text-white/30">{formatTime(sub.end)}</span>
+                                                        </div>
+                                                        <p
+                                                            className={`text-xs leading-relaxed ${activeSubtitle?.id === sub.id ? 'text-white' : 'text-white/60'}`}
+                                                        >
+                                                            {sub.text}
+                                                        </p>
+                                                    </button>
+                                                )
+                                            )}
+                                        </div>
+                                        <div className="px-4 py-2">
+                                            <button
+                                                onClick={() => {
+                                                    const start = currentTime;
+                                                    const end = Math.min(start + 1, duration);
+
+                                                    addNewSubtitle(start, end);
+                                                }}
+                                                className="flex w-full items-center justify-center gap-1.5 rounded-md bg-white/5 py-2 text-[11px] font-medium text-white/50 transition-all hover:bg-white/10 hover:text-white/80"
+                                                title="Ajouter un sous-titre"
+                                            >
+                                                <Plus className="h-3.5 w-3.5" />
+                                                Ajouter
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
                         </div>
                     </div>
                 )}
