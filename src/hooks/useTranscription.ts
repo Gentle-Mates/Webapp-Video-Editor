@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 
 import { extractAudioFromVideo } from '@/utils/audio';
+import { applyCheckup } from '@/utils/checkup';
 import type { Subtitle, TranscriptionStatus } from '@/utils/types';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL!;
@@ -63,7 +64,7 @@ export default function useTranscription() {
                 id: i + 1,
                 start: seg.start,
                 end: seg.end,
-                text: seg.text.trim()
+                text: applyCheckup(seg.text.trim())
             }));
 
             setSubtitles(subs);
