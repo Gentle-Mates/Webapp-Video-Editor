@@ -3,6 +3,8 @@ import { SessionProvider } from 'next-auth/react';
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
+import { PendingVideoProvider } from '@/contexts/PendingVideo';
+
 import './globals.css';
 
 const geistSans = Geist({
@@ -28,7 +30,9 @@ export default function RootLayout({
     return (
         <html lang="en">
             <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-                <SessionProvider>{children}</SessionProvider>
+                <SessionProvider>
+                    <PendingVideoProvider>{children}</PendingVideoProvider>
+                </SessionProvider>
             </body>
         </html>
     );
