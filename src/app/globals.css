@@ -6,10 +6,18 @@
 
   --color-primary: #ff00ec;
   --color-secondary: #efb8fa;
+
+  --color-base: #09090b;
+  --color-canvas: #0a0a0c;
+  --color-panel: #0c0c0e;
+  --color-elevated: #141416;
+
+  --text-2xs: 10px;
+  --text-xxs: 11px;
 }
 
 body {
-  background: #09090b;
+  background: var(--color-base);
   color: #ededed;
   font-family: var(--font-sans), system-ui, sans-serif;
 }
@@ -19,6 +27,10 @@ button, kbd {
 }
 
 /* Dark scrollbar for panels */
+.scrollbar-dark {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
 .scrollbar-dark::-webkit-scrollbar {
   width: 6px;
 }

@@ -6,6 +6,8 @@ type TranslationMode = 'mix' | 'fr' | 'en';
 
 type SubtitleView = 'original' | TranslationMode;
 
+type EditorMode = 'subtitles' | 'short';
+
 interface Subtitle {
     id: number;
     start: number;
@@ -20,4 +22,4 @@ interface SubtitleTrack {
     icon?: ReactNode;
 }
 
-export type { TranscriptionStatus, TranslationMode, SubtitleView, Subtitle, SubtitleTrack };
+export type { TranscriptionStatus, TranslationMode, SubtitleView, EditorMode, Subtitle, SubtitleTrack };

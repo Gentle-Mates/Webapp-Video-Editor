@@ -6,6 +6,15 @@ import type { Subtitle, TranscriptionStatus } from '@/utils/types';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL!;
 
+const ENDPOINTS = {
+    subtitles: { validate: '/api/transcription/validate', api: `${API_URL}/transcription` },
+    short: { validate: '/api/speech-to-text/validate', api: `${API_URL}/speech-to-text` }
+} as const;
+
+type TranscribeOptions =
+    | { mode?: 'subtitles'; contextWords?: string[] }
+    | { mode: 'short'; contextWords?: string[]; maxGap?: number; words?: number; chars?: number };
+
 export default function useTranscription() {
     const [status, setStatus] = useState<TranscriptionStatus>('idle');
     const [subtitles, setSubtitles] = useState<Subtitle[]>([]);
@@ -13,14 +22,18 @@ export default function useTranscription() {
 
     const nextId = useRef(1);
 
-    async function transcribe(file: File, contextWords?: string[]) {
+    async function transcribe(file: File, options: TranscribeOptions = {}) {
+        const { mode = 'subtitles', contextWords } = options;
+
+        const endpoints = ENDPOINTS[mode];
+
         setStatus('extracting');
         setError(null);
         setSubtitles([]);
         nextId.current = 1;
 
         try {
-            const validateResponse = await fetch('/api/transcription/validate');
+            const validateResponse = await fetch(endpoints.validate);
 
             if (!validateResponse.ok) {
                 const data = await validateResponse.json();
@@ -41,9 +54,23 @@ export default function useTranscription() {
                 formData.append('context_bias', JSON.stringify(contextWords));
             }
 
+            if (options.mode === 'short') {
+                if (options.maxGap) {
+                    formData.append('max_gap', String(options.maxGap));
+                }
+
+                if (options.words) {
+                    formData.append('words', String(options.words));
+                }
+
+                if (options.chars) {
+                    formData.append('chars', String(options.chars));
+                }
+            }
+
             setStatus('uploading');
 
-            const response = await fetch(`${API_URL}/transcription`, {
+            const response = await fetch(endpoints.api, {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${token}` },
                 body: formData

@@ -25,16 +25,19 @@ import {
     Plus
 } from 'lucide-react';
 import { signOut } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 import type { DragEvent, ChangeEvent } from 'react';
 
 import { ALL_TRACKS } from '@/components/Tracks';
 import { generateSRT, downloadSRT } from '@/utils/srt';
 import { formatTime, parseTime } from '@/utils/time';
-import type { Subtitle, SubtitleView, TranslationMode, SubtitleTrack } from '@/utils/types';
+import { usePendingVideo } from '@/contexts/PendingVideo';
+import type { Subtitle, SubtitleView, TranslationMode, SubtitleTrack, EditorMode } from '@/utils/types';
 
 import ScrubInput from '@/components/ScrubInput';
 import SubtitleTimeline from '@/components/SubtitleTimeline';
 import ContextWordsModal from '@/components/ContextWordsModal';
+import ModeSelectionModal from '@/components/ModeSelectionModal';
 import SettingsModal from '@/components/SettingsModal';
 import useTranscription from '@/hooks/useTranscription';
 import useTranslation from '@/hooks/useTranslation';
@@ -42,9 +45,14 @@ import useContextWords from '@/hooks/useContextWords';
 import useSettings from '@/hooks/useSettings';
 
 export default function Home() {
+    const router = useRouter();
+
+    const { setPendingFile } = usePendingVideo();
+
     const [videoSrc, setVideoSrc] = useState<string | null>(null);
     const [videoFile, setVideoFile] = useState<File | null>(null);
     const [videoName, setVideoName] = useState<string>('');
+    const [modeChosen, setModeChosen] = useState(false);
     const [isPlaying, setIsPlaying] = useState(false);
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
@@ -234,6 +242,7 @@ export default function Home() {
             setVideoSrc(URL.createObjectURL(file));
             setVideoFile(file);
             setVideoName(file.name);
+            setModeChosen(false);
             setIsPlaying(false);
             setCurrentTime(0);
             resetTranslations();
@@ -241,6 +250,25 @@ export default function Home() {
             setSubtitleView('original');
             reset();
         }
+    }
+
+    function handleModeSelect(mode: EditorMode) {
+        if (mode === 'short') {
+            if (videoFile) {
+                setPendingFile(videoFile);
+            }
+            if (videoSrc) {
+                URL.revokeObjectURL(videoSrc);
+            }
+            setVideoSrc(null);
+            setVideoFile(null);
+            setVideoName('');
+            router.push('/short');
+
+            return;
+        }
+
+        setModeChosen(true);
     }
 
     function deleteVideo() {
@@ -251,6 +279,7 @@ export default function Home() {
         setVideoSrc(null);
         setVideoFile(null);
         setVideoName('');
+        setModeChosen(false);
         setIsPlaying(false);
         setCurrentTime(0);
         setDuration(0);
@@ -395,7 +424,7 @@ export default function Home() {
         if (videoFile) {
             resetTranslations();
             setSubtitleView('original');
-            transcribe(videoFile, contextWords).then(() => {});
+            transcribe(videoFile, { mode: 'subtitles', contextWords }).then(() => {});
         }
     }
 
@@ -1422,6 +1451,8 @@ export default function Home() {
                     </div>
                 )}
             </main>
+
+            {videoSrc && !modeChosen && <ModeSelectionModal onSelect={handleModeSelect} />}
 
             {showContextModal && (
                 <ContextWordsModal
