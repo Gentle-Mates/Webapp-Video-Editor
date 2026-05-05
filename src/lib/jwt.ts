@@ -1,5 +1,7 @@
 import { SignJWT } from 'jose';
 
+type TranscriptionScope = 'transcription' | 'speech-to-text';
+
 const secret = new TextEncoder().encode(process.env.AUTH_SECRET);
 
 async function signToken(email: string): Promise<string> {
@@ -10,12 +12,12 @@ async function signToken(email: string): Promise<string> {
         .sign(secret);
 }
 
-async function signTranscriptionToken(email: string): Promise<string> {
-    return new SignJWT({ email, scope: 'transcription' })
+async function signScopedToken(email: string, scope: TranscriptionScope): Promise<string> {
+    return new SignJWT({ email, scope })
         .setProtectedHeader({ alg: 'HS256' })
         .setIssuedAt()
         .setExpirationTime('5m')
         .sign(secret);
 }
 
-export { signToken, signTranscriptionToken }
+export { signToken, signScopedToken };

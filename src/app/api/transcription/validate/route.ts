@@ -1,5 +1,5 @@
 import { auth } from '@/lib/auth';
-import { signTranscriptionToken } from '@/lib/jwt';
+import { signScopedToken } from '@/lib/jwt';
 
 async function GET() {
     const session = await auth();
@@ -9,7 +9,7 @@ async function GET() {
     }
 
     try {
-        const token = await signTranscriptionToken(session.user.email);
+        const token = await signScopedToken(session.user.email, 'transcription');
 
         return Response.json({ token });
     } catch (err) {
