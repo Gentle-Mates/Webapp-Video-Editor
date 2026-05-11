@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useRef, useEffect, useEffectEvent, useMemo } from 'react';
+import { useState, useRef, useEffect, useEffectEvent, useMemo, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import {
     SlidersHorizontal,
     Settings,
@@ -25,6 +26,7 @@ import {
     Plus
 } from 'lucide-react';
 import { signOut } from 'next-auth/react';
+import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import type { DragEvent, ChangeEvent } from 'react';
 
 import { ALL_TRACKS } from '@/components/Tracks';
@@ -40,6 +42,43 @@ import useTranscription from '@/hooks/useTranscription';
 import useTranslation from '@/hooks/useTranslation';
 import useContextWords from '@/hooks/useContextWords';
 import useSettings from '@/hooks/useSettings';
+
+function EditorLayout({ withTimeline, children }: { withTimeline: boolean; children: [ReactNode, ReactNode] }) {
+    const [video, controls] = children;
+
+    if (withTimeline) {
+        return (
+            <PanelGroup
+                direction="vertical"
+                autoSaveId="editor-vertical"
+            >
+                <Panel
+                    defaultSize={68}
+                    minSize={30}
+                    className="flex flex-col min-w-0"
+                >
+                    {video}
+                </Panel>
+                <PanelResizeHandle className="h-1 bg-white/5 transition-colors hover:bg-white/30 data-[resize-handle-state=drag]:bg-primary/50" />
+                <Panel
+                    defaultSize={32}
+                    minSize={10}
+                    maxSize={70}
+                    className="flex flex-col"
+                >
+                    <div className="flex-1 overflow-hidden border-t border-white/5 bg-[#0c0c0e] px-6 py-4">{controls}</div>
+                </Panel>
+            </PanelGroup>
+        );
+    }
+
+    return (
+        <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
+            {video}
+            <div className="shrink-0 border-t border-white/5 bg-[#0c0c0e] px-6 py-4">{controls}</div>
+        </div>
+    );
+}
 
 export default function Home() {
     const [videoSrc, setVideoSrc] = useState<string | null>(null);
@@ -83,6 +122,38 @@ export default function Home() {
     const editContainerRef = useRef<HTMLDivElement>(null);
     const subtitleElRefs = useRef<Map<number, HTMLElement>>(new Map());
     const exportMenuRef = useRef<HTMLDivElement>(null);
+    const timelineMenuButtonRef = useRef<HTMLButtonElement>(null);
+    const overlayMenuButtonRef = useRef<HTMLButtonElement>(null);
+
+    const setTimelineMenuPosition = (popoverEl: HTMLDivElement | null) => {
+        if (!popoverEl) {
+            return;
+        }
+
+        const r = timelineMenuButtonRef.current?.getBoundingClientRect();
+
+        if (!r) {
+            return;
+        }
+
+        popoverEl.style.bottom = `${window.innerHeight - r.top + 8}px`;
+        popoverEl.style.right = `${window.innerWidth - r.right}px`;
+    };
+
+    const setOverlayMenuPosition = (popoverEl: HTMLDivElement | null) => {
+        if (!popoverEl) {
+            return;
+        }
+
+        const r = overlayMenuButtonRef.current?.getBoundingClientRect();
+
+        if (!r) {
+            return;
+        }
+
+        popoverEl.style.bottom = `${window.innerHeight - r.top + 8}px`;
+        popoverEl.style.right = `${window.innerWidth - r.right}px`;
+    };
 
     const { status, subtitles, error, transcribe, reset, updateSubtitle, addSubtitle, deleteSubtitle, restoreSubtitle, loadSubtitles, setLoadError } =
         useTranscription();
@@ -643,6 +714,7 @@ export default function Home() {
 
     const isProcessing = status === 'extracting' || status === 'uploading' || status === 'transcribing';
     const progressLabel = status === 'extracting' ? 'Envoi...' : status === 'uploading' || status === 'transcribing' ? 'Traitement...' : '';
+    const hasBottomTimeline = timelineTracksToDisplay.length > 0 && status === 'done';
 
     return (
         <div className="flex h-screen flex-col overflow-hidden bg-[#09090b]">
@@ -780,692 +852,740 @@ export default function Home() {
                             onChange={handleImportSRT}
                             className="hidden"
                         />
-                        {/* Video */}
-                        <div className="flex flex-1 flex-col overflow-hidden min-w-0">
-                            <div className="relative flex flex-1 items-center justify-center bg-black min-h-0">
-                                <video
-                                    ref={videoRef}
-                                    src={videoSrc}
-                                    className="h-full w-full object-contain"
-                                    onClick={togglePlay}
-                                />
+                        <PanelGroup
+                            direction="horizontal"
+                            autoSaveId="editor-horizontal"
+                            className="flex-1"
+                        >
+                            {/* Video + Controls */}
+                            <Panel
+                                defaultSize={80}
+                                minSize={40}
+                                className="flex flex-col"
+                            >
+                                <EditorLayout withTimeline={hasBottomTimeline}>
+                                    <div className="relative flex flex-1 items-center justify-center bg-black min-h-0">
+                                        <video
+                                            ref={videoRef}
+                                            src={videoSrc}
+                                            className="h-full w-full object-contain"
+                                            onClick={togglePlay}
+                                        />
 
-                                {activeOverlayTracks.length > 0 && (
-                                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 max-w-[80%] flex flex-col items-center gap-1">
-                                        {activeOverlayTracks.map(({ track, text }) => (
-                                            <div
-                                                key={track}
-                                                className="flex items-center gap-2 rounded-lg bg-black/70 px-4 py-2 text-center text-sm font-medium text-white backdrop-blur-sm"
-                                            >
-                                                {' '}
-                                                {activeOverlayTracks.length > 1 && (
-                                                    <div className="shrink-0 flex items-center justify-center text-white/60">
-                                                        {ALL_TRACKS[track].icon}
+                                        {activeOverlayTracks.length > 0 && (
+                                            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 max-w-[80%] flex flex-col items-center gap-1">
+                                                {activeOverlayTracks.map(({ track, text }) => (
+                                                    <div
+                                                        key={track}
+                                                        className="flex items-center gap-2 rounded-lg bg-black/70 px-4 py-2 text-center text-sm font-medium text-white backdrop-blur-sm"
+                                                    >
+                                                        {activeOverlayTracks.length > 1 && (
+                                                            <div className="shrink-0 flex items-center justify-center text-white/60">
+                                                                {ALL_TRACKS[track].icon}
+                                                            </div>
+                                                        )}
+                                                        <p>{text}</p>
                                                     </div>
-                                                )}
-                                                <p>{text}</p>
+                                                ))}
                                             </div>
-                                        ))}
+                                        )}
                                     </div>
-                                )}
-                            </div>
-                            {/* Controls panel */}
-                            <div className="shrink-0 border-t border-white/5 bg-[#0c0c0e] px-6 py-4">
-                                {/* Timeline */}
-                                <div className="mb-5">
-                                    <div className="group relative flex h-6 cursor-pointer items-center">
-                                        {/* Track */}
-                                        <div className="absolute inset-x-0 h-1.5 rounded-full bg-white/10" />
+                                    <>
+                                        {/* Timeline */}
+                                        <div className="mb-5">
+                                            <div className="group relative flex h-6 cursor-pointer items-center">
+                                                {/* Track */}
+                                                <div className="absolute inset-x-0 h-1.5 rounded-full bg-white/10" />
 
-                                        {/* Progress */}
-                                        <div
-                                            className="absolute h-1.5 rounded-full bg-linear-to-r from-secondary to-primary"
-                                            style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
-                                        />
+                                                {/* Progress */}
+                                                <div
+                                                    className="absolute h-1.5 rounded-full bg-linear-to-r from-secondary to-primary"
+                                                    style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
+                                                />
 
-                                        {/* Thumb */}
-                                        <div
-                                            className="pointer-events-none absolute h-4 w-4 -translate-x-1/2 rounded-full bg-white shadow-lg shadow-black/50"
-                                            style={{ left: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
-                                        />
+                                                {/* Thumb */}
+                                                <div
+                                                    className="pointer-events-none absolute h-4 w-4 -translate-x-1/2 rounded-full bg-white shadow-lg shadow-black/50"
+                                                    style={{ left: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
+                                                />
 
-                                        {/* Slider input */}
-                                        <input
-                                            type="range"
-                                            min={0}
-                                            max={duration || 1}
-                                            step={0.01}
-                                            value={currentTime}
-                                            onChange={handleTimelineChange}
-                                            onMouseDown={handleTimelineMouseDown}
-                                            onMouseUp={handleTimelineMouseUp}
-                                            onTouchStart={handleTimelineMouseDown}
-                                            onTouchEnd={handleTimelineMouseUp}
-                                            className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
-                                        />
-                                    </div>
+                                                {/* Slider input */}
+                                                <input
+                                                    type="range"
+                                                    min={0}
+                                                    max={duration || 1}
+                                                    step={0.01}
+                                                    value={currentTime}
+                                                    onChange={handleTimelineChange}
+                                                    onMouseDown={handleTimelineMouseDown}
+                                                    onMouseUp={handleTimelineMouseUp}
+                                                    onTouchStart={handleTimelineMouseDown}
+                                                    onTouchEnd={handleTimelineMouseUp}
+                                                    className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+                                                />
+                                            </div>
 
-                                    {/* Time display */}
-                                    <div className="mt-2 flex justify-between text-[11px] font-medium text-white/30 font-mono">
-                                        <span>{formatTime(currentTime)}</span>
-                                        <span>{formatTime(duration)}</span>
+                                            {/* Time display */}
+                                            <div className="mt-2 flex justify-between text-[11px] font-medium text-white/30 font-mono">
+                                                <span>{formatTime(currentTime)}</span>
+                                                <span>{formatTime(duration)}</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Control buttons */}
+                                        <div className="flex items-center justify-between">
+                                            {/* Left: Volume */}
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    onClick={toggleMute}
+                                                    className="flex h-10 w-10 items-center justify-center rounded-full bg-white/5 text-white/60 transition-all hover:bg-white/10 hover:text-white"
+                                                    title={volume > 0 ? 'Couper le son' : 'Activer le son'}
+                                                >
+                                                    {volume === 0 ? (
+                                                        <VolumeX className="h-4 w-4" />
+                                                    ) : volume < 0.5 ? (
+                                                        <Volume1 className="h-4 w-4" />
+                                                    ) : (
+                                                        <Volume2 className="h-4 w-4" />
+                                                    )}
+                                                </button>
+                                                <div className="relative flex h-6 w-20 items-center">
+                                                    <div className="absolute inset-x-0 h-1 rounded-full bg-white/10" />
+                                                    <div
+                                                        className="absolute h-1 rounded-full bg-white/30"
+                                                        style={{ width: `${volume * 100}%` }}
+                                                    />
+                                                    <input
+                                                        type="range"
+                                                        min={0}
+                                                        max={1}
+                                                        step={0.01}
+                                                        value={volume}
+                                                        onChange={e => changeVolume(parseFloat(e.target.value))}
+                                                        className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {/* Center: Back/Skip & Play */}
+                                            <div className="flex items-center gap-3">
+                                                <button
+                                                    onClick={() => skip(-5)}
+                                                    className="group flex h-10 items-center gap-1.5 rounded-full bg-white/5 px-4 text-white/60 transition-all hover:bg-white/10 hover:text-white"
+                                                    title="Reculer de 5 secondes"
+                                                >
+                                                    <Rewind
+                                                        className="h-4 w-4"
+                                                        fill="currentColor"
+                                                    />
+                                                    <span className="text-xs font-medium">5s</span>
+                                                </button>
+
+                                                <button
+                                                    onClick={togglePlay}
+                                                    className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/85 text-white transition-all hover:bg-primary"
+                                                    title={isPlaying ? 'Pause' : 'Lecture'}
+                                                >
+                                                    {isPlaying ? (
+                                                        <Pause
+                                                            className="h-5 w-5"
+                                                            fill="currentColor"
+                                                        />
+                                                    ) : (
+                                                        <Play
+                                                            className="h-5 w-5 ml-0.5"
+                                                            fill="currentColor"
+                                                        />
+                                                    )}
+                                                </button>
+
+                                                <button
+                                                    onClick={() => skip(5)}
+                                                    className="group flex h-10 items-center gap-1.5 rounded-full bg-white/5 px-4 text-white/60 transition-all hover:bg-white/10 hover:text-white"
+                                                    title="Avancer de 5 secondes"
+                                                >
+                                                    <span className="text-xs font-medium">5s</span>
+                                                    <FastForward
+                                                        className="h-4 w-4"
+                                                        fill="currentColor"
+                                                    />
+                                                </button>
+                                            </div>
+
+                                            {/* Right: Timeline toggle + Subtitle overlay */}
+                                            <div
+                                                className="flex items-center justify-end gap-2"
+                                                style={{ width: '148px' }}
+                                            >
+                                                {/* Timeline toggle */}
+                                                <div className="relative">
+                                                    <button
+                                                        ref={timelineMenuButtonRef}
+                                                        onClick={() => subtitles.length > 0 && setShowTimelineMenu(v => !v)}
+                                                        className={`flex h-10 w-10 items-center justify-center rounded-full transition-all ${
+                                                            subtitles.length === 0
+                                                                ? 'bg-white/5 text-white/10 cursor-not-allowed'
+                                                                : showTimelineMenu || Object.values(timelineTracks).some(Boolean)
+                                                                  ? 'bg-violet-500/10 text-secondary'
+                                                                  : 'bg-white/5 text-white/30 hover:bg-white/10 hover:text-white/60'
+                                                        }`}
+                                                        disabled={subtitles.length === 0}
+                                                        title="Paramètres de la timeline"
+                                                    >
+                                                        <Film className="h-4 w-4" />
+                                                    </button>
+
+                                                    {showTimelineMenu &&
+                                                        createPortal(
+                                                            <>
+                                                                <div
+                                                                    className="fixed inset-0 z-50"
+                                                                    onPointerDown={() => setShowTimelineMenu(false)}
+                                                                />
+                                                                <div
+                                                                    ref={setTimelineMenuPosition}
+                                                                    className="fixed z-50 min-w-40 rounded-xl border border-white/10 bg-[#141416] p-1.5 shadow-xl"
+                                                                >
+                                                                    <button
+                                                                        onClick={() =>
+                                                                            setTimelineTracks(prev => ({
+                                                                                ...prev,
+                                                                                showCurrent: !prev.showCurrent
+                                                                            }))
+                                                                        }
+                                                                        className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium transition-all hover:bg-white/5 ${
+                                                                            timelineTracks.showCurrent
+                                                                                ? 'text-secondary'
+                                                                                : 'text-white/50 hover:text-white/80'
+                                                                        }`}
+                                                                    >
+                                                                        <div
+                                                                            className={`flex h-4 w-4 items-center justify-center rounded border transition-all ${
+                                                                                timelineTracks.showCurrent
+                                                                                    ? 'border-secondary bg-secondary text-black'
+                                                                                    : 'border-white/20'
+                                                                            }`}
+                                                                        >
+                                                                            {timelineTracks.showCurrent && (
+                                                                                <Check
+                                                                                    className="h-3 w-3"
+                                                                                    strokeWidth={3}
+                                                                                />
+                                                                            )}
+                                                                        </div>
+                                                                        Track en cours
+                                                                    </button>
+
+                                                                    <div className="my-1 h-px bg-white/5" />
+
+                                                                    {(Object.keys(ALL_TRACKS) as SubtitleView[]).map(trackId => {
+                                                                        const active = timelineTracks[trackId];
+
+                                                                        if (
+                                                                            !(trackId === 'original'
+                                                                                ? subtitles.length > 0
+                                                                                : translations[trackId].length > 0)
+                                                                        ) {
+                                                                            return null;
+                                                                        }
+
+                                                                        return (
+                                                                            <button
+                                                                                key={trackId}
+                                                                                onClick={() =>
+                                                                                    setTimelineTracks(prev => ({
+                                                                                        ...prev,
+                                                                                        showCurrent: false,
+                                                                                        [trackId]: !prev[trackId]
+                                                                                    }))
+                                                                                }
+                                                                                className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium transition-all hover:bg-white/5 ${
+                                                                                    active ? 'text-secondary' : 'text-white/50 hover:text-white/80'
+                                                                                }`}
+                                                                            >
+                                                                                <div
+                                                                                    className={`flex h-4 w-4 items-center justify-center rounded border transition-all ${
+                                                                                        active
+                                                                                            ? 'border-secondary bg-secondary text-black'
+                                                                                            : 'border-white/20'
+                                                                                    }`}
+                                                                                >
+                                                                                    {active && (
+                                                                                        <Check
+                                                                                            className="h-3 w-3"
+                                                                                            strokeWidth={3}
+                                                                                        />
+                                                                                    )}
+                                                                                </div>
+                                                                                {ALL_TRACKS[trackId].label}
+                                                                            </button>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </>,
+                                                            document.body
+                                                        )}
+                                                </div>
+
+                                                {/* Subtitle overlay */}
+                                                <div className="relative">
+                                                    <button
+                                                        ref={overlayMenuButtonRef}
+                                                        onClick={() => subtitles.length > 0 && setShowOverlayMenu(v => !v)}
+                                                        className={`flex h-10 w-10 items-center justify-center rounded-full transition-all ${
+                                                            subtitles.length === 0
+                                                                ? 'bg-white/5 text-white/10 cursor-not-allowed'
+                                                                : Object.values(overlayTracks).some(Boolean)
+                                                                  ? 'bg-violet-500/10 text-secondary'
+                                                                  : 'bg-white/5 text-white/30 hover:bg-white/10 hover:text-white/60'
+                                                        }`}
+                                                        title="Sous-titres sur la vidéo"
+                                                    >
+                                                        <MessageSquareText className="h-4 w-4" />
+                                                    </button>
+
+                                                    {showOverlayMenu &&
+                                                        createPortal(
+                                                            <>
+                                                                <div
+                                                                    className="fixed inset-0 z-50"
+                                                                    onPointerDown={() => setShowOverlayMenu(false)}
+                                                                />
+                                                                <div
+                                                                    ref={setOverlayMenuPosition}
+                                                                    className="fixed z-50 min-w-40 rounded-xl border border-white/10 bg-[#141416] p-1.5 shadow-xl"
+                                                                >
+                                                                    <button
+                                                                        onClick={() =>
+                                                                            setOverlayTracks(prev => ({
+                                                                                ...prev,
+                                                                                showCurrent: !prev.showCurrent
+                                                                            }))
+                                                                        }
+                                                                        className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium transition-all hover:bg-white/5 ${
+                                                                            overlayTracks.showCurrent
+                                                                                ? 'text-secondary'
+                                                                                : 'text-white/50 hover:text-white/80'
+                                                                        }`}
+                                                                    >
+                                                                        <div
+                                                                            className={`flex h-4 w-4 items-center justify-center rounded border transition-all ${
+                                                                                overlayTracks.showCurrent
+                                                                                    ? 'border-secondary bg-secondary text-black'
+                                                                                    : 'border-white/20'
+                                                                            }`}
+                                                                        >
+                                                                            {overlayTracks.showCurrent && (
+                                                                                <Check
+                                                                                    className="h-3 w-3"
+                                                                                    strokeWidth={3}
+                                                                                />
+                                                                            )}
+                                                                        </div>
+                                                                        Track en cours
+                                                                    </button>
+
+                                                                    <div className="my-1 h-px bg-white/5" />
+
+                                                                    {(Object.keys(ALL_TRACKS) as SubtitleView[]).map(trackId => {
+                                                                        const active = overlayTracks[trackId];
+
+                                                                        if (
+                                                                            !(trackId === 'original'
+                                                                                ? subtitles.length > 0
+                                                                                : translations[trackId].length > 0)
+                                                                        ) {
+                                                                            return null;
+                                                                        }
+
+                                                                        return (
+                                                                            <button
+                                                                                key={trackId}
+                                                                                onClick={() => toggleOverlayTrack(trackId)}
+                                                                                className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium transition-all hover:bg-white/5 ${
+                                                                                    active ? 'text-secondary' : 'text-white/50 hover:text-white/80'
+                                                                                }`}
+                                                                            >
+                                                                                <div
+                                                                                    className={`flex h-4 w-4 items-center justify-center rounded border transition-all ${
+                                                                                        active
+                                                                                            ? 'border-secondary bg-secondary text-black'
+                                                                                            : 'border-white/20'
+                                                                                    }`}
+                                                                                >
+                                                                                    {active && (
+                                                                                        <Check
+                                                                                            className="h-3 w-3"
+                                                                                            strokeWidth={3}
+                                                                                        />
+                                                                                    )}
+                                                                                </div>
+                                                                                {ALL_TRACKS[trackId].label}
+                                                                            </button>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </>,
+                                                            document.body
+                                                        )}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Subtitle Timeline */}
+                                        {timelineTracksToDisplay.length > 0 && status === 'done' && (
+                                            <div className="mt-4 rounded-lg border border-white/5 bg-white/2">
+                                                <SubtitleTimeline
+                                                    tracks={timelineTracksToDisplay}
+                                                    duration={duration}
+                                                    currentTime={currentTime}
+                                                    activeSubtitleId={activeSubtitle?.id ?? null}
+                                                    onSeek={seekTo}
+                                                    onSubtitleUpdate={handleTimelineSubtitleUpdate}
+                                                    onSubtitleTextEdit={(trackId, sub) => {
+                                                        setSubtitleView(trackId);
+                                                        startEditing(sub);
+                                                    }}
+                                                    onSubtitlesDelete={ids => ids.forEach(removeSubtitle)}
+                                                    onSubtitleAdd={addNewSubtitle}
+                                                />
+                                            </div>
+                                        )}
+
+                                        {/* Keyboard shortcuts hint */}
+                                        <div className="mt-4 flex justify-center gap-6 text-[10px] text-white/20">
+                                            <span className="flex items-center gap-1.5">
+                                                <kbd className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-white/40">&larr;</kbd>
+                                                <span>-5s</span>
+                                            </span>
+                                            <span className="flex items-center gap-1.5">
+                                                <kbd className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-white/40">Space</kbd>
+                                                <span>Play</span>
+                                            </span>
+                                            <span className="flex items-center gap-1.5">
+                                                <kbd className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-white/40">&rarr;</kbd>
+                                                <span>+5s</span>
+                                            </span>
+                                            <span className="flex items-center gap-1.5">
+                                                <kbd className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-white/40">Ctrl + Z</kbd>
+                                                <span>Undo</span>
+                                            </span>
+                                        </div>
+                                    </>
+                                </EditorLayout>
+                            </Panel>
+                            <PanelResizeHandle className="w-1 bg-white/5 transition-colors hover:bg-white/30 data-[resize-handle-state=drag]:bg-primary/50" />
+
+                            {/* Subtitles panel */}
+                            <Panel
+                                defaultSize={16}
+                                minSize={15}
+                                maxSize={45}
+                                className="flex flex-col border-l border-white/5 bg-[#0c0c0e]"
+                            >
+                                <div className="flex items-center justify-between border-b border-white/5 px-4 py-3">
+                                    <span className="text-xs font-medium text-white/60">Sous-titres</span>
+                                    <div className="flex items-center gap-2">
+                                        {status === 'done' && subtitles.length > 0 && (
+                                            <>
+                                                <button
+                                                    onClick={() => setShowContextModal(true)}
+                                                    className="flex items-center gap-1.5 rounded-md bg-white/5 px-2.5 py-1.5 text-[10px] font-medium text-white/60 transition-all hover:bg-white/10 hover:text-white"
+                                                    title="Mots de contexte"
+                                                >
+                                                    <SlidersHorizontal className="h-4 w-4" />
+                                                </button>
+                                                <button
+                                                    onClick={handleReload}
+                                                    disabled={isTranslating}
+                                                    className="flex items-center gap-1.5 rounded-md bg-white/5 px-2.5 py-1.5 text-[10px] font-medium text-white/60 transition-all hover:bg-white/10 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed"
+                                                    title={subtitleView === 'original' ? 'Regénérer les sous-titres' : 'Retraduire'}
+                                                >
+                                                    {isTranslating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                                                </button>
+                                                <button
+                                                    onClick={() => srtInputRef.current?.click()}
+                                                    className="flex items-center gap-1.5 rounded-md bg-white/5 px-2.5 py-1.5 text-[10px] font-medium text-white/60 transition-all hover:bg-white/10 hover:text-white"
+                                                    title="Importer un fichier .srt"
+                                                >
+                                                    <Upload className="h-4 w-4" />
+                                                </button>
+                                            </>
+                                        )}
                                     </div>
                                 </div>
 
-                                {/* Control buttons */}
-                                <div className="flex items-center justify-between">
-                                    {/* Left: Volume */}
-                                    <div className="flex items-center gap-2">
-                                        <button
-                                            onClick={toggleMute}
-                                            className="flex h-10 w-10 items-center justify-center rounded-full bg-white/5 text-white/60 transition-all hover:bg-white/10 hover:text-white"
-                                            title={volume > 0 ? 'Couper le son' : 'Activer le son'}
-                                        >
-                                            {volume === 0 ? (
-                                                <VolumeX className="h-4 w-4" />
-                                            ) : volume < 0.5 ? (
-                                                <Volume1 className="h-4 w-4" />
-                                            ) : (
-                                                <Volume2 className="h-4 w-4" />
-                                            )}
-                                        </button>
-                                        <div className="relative flex h-6 w-20 items-center">
-                                            <div className="absolute inset-x-0 h-1 rounded-full bg-white/10" />
-                                            <div
-                                                className="absolute h-1 rounded-full bg-white/30"
-                                                style={{ width: `${volume * 100}%` }}
-                                            />
-                                            <input
-                                                type="range"
-                                                min={0}
-                                                max={1}
-                                                step={0.01}
-                                                value={volume}
-                                                onChange={e => changeVolume(parseFloat(e.target.value))}
-                                                className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
-                                            />
-                                        </div>
+                                {/* View tabs */}
+                                {status === 'done' && subtitles.length > 0 && (
+                                    <div className="flex border-b border-white/5">
+                                        {(Object.keys(ALL_TRACKS) as SubtitleView[]).map(trackId => {
+                                            const track = ALL_TRACKS[trackId];
+
+                                            return (
+                                                <button
+                                                    key={trackId}
+                                                    onClick={() => {
+                                                        if (trackId === 'original') {
+                                                            setSubtitleView('original');
+                                                        } else {
+                                                            handleTranslate(trackId).then(() => null);
+                                                        }
+                                                    }}
+                                                    disabled={isTranslating && trackId !== 'original'}
+                                                    className={`flex flex-1 items-center justify-center gap-1.5 py-2 text-[10px] font-medium transition-all disabled:opacity-40 ${
+                                                        subtitleView === trackId
+                                                            ? 'text-white bg-white/5'
+                                                            : 'text-white/40 hover:text-white/60 hover:bg-white/2'
+                                                    }`}
+                                                    title={track.label}
+                                                >
+                                                    {track.icon}
+                                                </button>
+                                            );
+                                        })}
                                     </div>
+                                )}
 
-                                    {/* Center: Back/Skip & Play */}
-                                    <div className="flex items-center gap-3">
-                                        <button
-                                            onClick={() => skip(-5)}
-                                            className="group flex h-10 items-center gap-1.5 rounded-full bg-white/5 px-4 text-white/60 transition-all hover:bg-white/10 hover:text-white"
-                                            title="Reculer de 5 secondes"
-                                        >
-                                            <Rewind
-                                                className="h-4 w-4"
-                                                fill="currentColor"
-                                            />
-                                            <span className="text-xs font-medium">5s</span>
-                                        </button>
+                                {/* Processing state */}
+                                {isProcessing && (
+                                    <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6">
+                                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+                                            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                                        </div>
+                                        <p className="text-sm font-medium text-white/80">{progressLabel}</p>
+                                    </div>
+                                )}
 
+                                {/* Error state */}
+                                {status === 'error' && (
+                                    <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6">
+                                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-500/10">
+                                            <AlertCircle className="h-6 w-6 text-red-400" />
+                                        </div>
+                                        <div className="text-center">
+                                            <p className="text-sm font-medium text-red-400">Erreur</p>
+                                            <p className="mt-1 text-xs text-white/40">{error}</p>
+                                        </div>
                                         <button
-                                            onClick={togglePlay}
-                                            className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/85 text-white transition-all hover:bg-primary"
-                                            title={isPlaying ? 'Pause' : 'Lecture'}
+                                            onClick={handleTranscribe}
+                                            className="mt-2 flex items-center gap-2 rounded-full bg-red-500/10 px-5 py-2.5 text-sm font-medium text-red-400 transition-all hover:bg-red-500/20"
                                         >
-                                            {isPlaying ? (
-                                                <Pause
-                                                    className="h-5 w-5"
-                                                    fill="currentColor"
-                                                />
-                                            ) : (
-                                                <Play
-                                                    className="h-5 w-5 ml-0.5"
-                                                    fill="currentColor"
-                                                />
-                                            )}
-                                        </button>
-
-                                        <button
-                                            onClick={() => skip(5)}
-                                            className="group flex h-10 items-center gap-1.5 rounded-full bg-white/5 px-4 text-white/60 transition-all hover:bg-white/10 hover:text-white"
-                                            title="Avancer de 5 secondes"
-                                        >
-                                            <span className="text-xs font-medium">5s</span>
-                                            <FastForward
-                                                className="h-4 w-4"
-                                                fill="currentColor"
-                                            />
+                                            <RefreshCw className="h-4 w-4" />
+                                            Réessayer
                                         </button>
                                     </div>
+                                )}
 
-                                    {/* Right: Timeline toggle + Subtitle overlay */}
-                                    <div
-                                        className="flex items-center justify-end gap-2"
-                                        style={{ width: '148px' }}
-                                    >
-                                        {/* Timeline toggle */}
-                                        <div className="relative">
+                                {/* Idle state */}
+                                {status === 'idle' && (
+                                    <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6">
+                                        <div className="flex items-center gap-2">
                                             <button
-                                                onClick={() => subtitles.length > 0 && setShowTimelineMenu(v => !v)}
-                                                className={`flex h-10 w-10 items-center justify-center rounded-full transition-all ${
-                                                    subtitles.length === 0
-                                                        ? 'bg-white/5 text-white/10 cursor-not-allowed'
-                                                        : showTimelineMenu || Object.values(timelineTracks).some(Boolean)
-                                                          ? 'bg-violet-500/10 text-secondary'
-                                                          : 'bg-white/5 text-white/30 hover:bg-white/10 hover:text-white/60'
-                                                }`}
-                                                disabled={subtitles.length === 0}
-                                                title="Paramètres de la timeline"
-                                            >
-                                                <Film className="h-4 w-4" />
-                                            </button>
-
-                                            {showTimelineMenu && (
-                                                <>
-                                                    <div
-                                                        className="fixed inset-0 z-10"
-                                                        onPointerDown={() => setShowTimelineMenu(false)}
-                                                    />
-                                                    <div className="absolute bottom-full right-0 z-20 mb-2 min-w-40 rounded-xl border border-white/10 bg-[#141416] p-1.5 shadow-xl">
-                                                        <button
-                                                            onClick={() =>
-                                                                setTimelineTracks(prev => ({
-                                                                    ...prev,
-                                                                    showCurrent: !prev.showCurrent
-                                                                }))
-                                                            }
-                                                            className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium transition-all hover:bg-white/5 ${
-                                                                timelineTracks.showCurrent ? 'text-secondary' : 'text-white/50 hover:text-white/80'
-                                                            }`}
-                                                        >
-                                                            <div
-                                                                className={`flex h-4 w-4 items-center justify-center rounded border transition-all ${
-                                                                    timelineTracks.showCurrent
-                                                                        ? 'border-secondary bg-secondary text-black'
-                                                                        : 'border-white/20'
-                                                                }`}
-                                                            >
-                                                                {timelineTracks.showCurrent && (
-                                                                    <Check
-                                                                        className="h-3 w-3"
-                                                                        strokeWidth={3}
-                                                                    />
-                                                                )}
-                                                            </div>
-                                                            Track en cours
-                                                        </button>
-
-                                                        <div className="my-1 h-px bg-white/5" />
-
-                                                        {(Object.keys(ALL_TRACKS) as SubtitleView[]).map(trackId => {
-                                                            const active = timelineTracks[trackId];
-
-                                                            if (!(trackId === 'original' ? subtitles.length > 0 : translations[trackId].length > 0)) {
-                                                                return null;
-                                                            }
-
-                                                            return (
-                                                                <button
-                                                                    key={trackId}
-                                                                    onClick={() =>
-                                                                        setTimelineTracks(prev => ({
-                                                                            ...prev,
-                                                                            showCurrent: false,
-                                                                            [trackId]: !prev[trackId]
-                                                                        }))
-                                                                    }
-                                                                    className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium transition-all hover:bg-white/5 ${
-                                                                        active ? 'text-secondary' : 'text-white/50 hover:text-white/80'
-                                                                    }`}
-                                                                >
-                                                                    <div
-                                                                        className={`flex h-4 w-4 items-center justify-center rounded border transition-all ${
-                                                                            active ? 'border-secondary bg-secondary text-black' : 'border-white/20'
-                                                                        }`}
-                                                                    >
-                                                                        {active && (
-                                                                            <Check
-                                                                                className="h-3 w-3"
-                                                                                strokeWidth={3}
-                                                                            />
-                                                                        )}
-                                                                    </div>
-                                                                    {ALL_TRACKS[trackId].label}
-                                                                </button>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                </>
-                                            )}
-                                        </div>
-
-                                        {/* Subtitle overlay */}
-                                        <div className="relative">
-                                            <button
-                                                onClick={() => subtitles.length > 0 && setShowOverlayMenu(v => !v)}
-                                                className={`flex h-10 w-10 items-center justify-center rounded-full transition-all ${
-                                                    subtitles.length === 0
-                                                        ? 'bg-white/5 text-white/10 cursor-not-allowed'
-                                                        : Object.values(overlayTracks).some(Boolean)
-                                                          ? 'bg-violet-500/10 text-secondary'
-                                                          : 'bg-white/5 text-white/30 hover:bg-white/10 hover:text-white/60'
-                                                }`}
-                                                title="Sous-titres sur la vidéo"
+                                                onClick={handleTranscribe}
+                                                className="flex h-10 items-center gap-2 whitespace-nowrap rounded-lg bg-primary/85 px-6 text-sm font-medium text-white transition-all hover:bg-primary"
                                             >
                                                 <MessageSquareText className="h-4 w-4" />
+                                                Générer les sous-titres
                                             </button>
-
-                                            {showOverlayMenu && (
-                                                <>
-                                                    <div
-                                                        className="fixed inset-0 z-10"
-                                                        onPointerDown={() => setShowOverlayMenu(false)}
-                                                    />
-                                                    <div className="absolute bottom-full right-0 z-20 mb-2 min-w-40 rounded-xl border border-white/10 bg-[#141416] p-1.5 shadow-xl">
-                                                        <button
-                                                            onClick={() =>
-                                                                setOverlayTracks(prev => ({
-                                                                    ...prev,
-                                                                    showCurrent: !prev.showCurrent
-                                                                }))
-                                                            }
-                                                            className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium transition-all hover:bg-white/5 ${
-                                                                overlayTracks.showCurrent ? 'text-secondary' : 'text-white/50 hover:text-white/80'
-                                                            }`}
-                                                        >
-                                                            <div
-                                                                className={`flex h-4 w-4 items-center justify-center rounded border transition-all ${
-                                                                    overlayTracks.showCurrent
-                                                                        ? 'border-secondary bg-secondary text-black'
-                                                                        : 'border-white/20'
-                                                                }`}
-                                                            >
-                                                                {overlayTracks.showCurrent && (
-                                                                    <Check
-                                                                        className="h-3 w-3"
-                                                                        strokeWidth={3}
-                                                                    />
-                                                                )}
-                                                            </div>
-                                                            Track en cours
-                                                        </button>
-
-                                                        <div className="my-1 h-px bg-white/5" />
-
-                                                        {(Object.keys(ALL_TRACKS) as SubtitleView[]).map(trackId => {
-                                                            const active = overlayTracks[trackId];
-
-                                                            if (!(trackId === 'original' ? subtitles.length > 0 : translations[trackId].length > 0)) {
-                                                                return null;
-                                                            }
-
-                                                            return (
-                                                                <button
-                                                                    key={trackId}
-                                                                    onClick={() => toggleOverlayTrack(trackId)}
-                                                                    className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium transition-all hover:bg-white/5 ${
-                                                                        active ? 'text-secondary' : 'text-white/50 hover:text-white/80'
-                                                                    }`}
-                                                                >
-                                                                    <div
-                                                                        className={`flex h-4 w-4 items-center justify-center rounded border transition-all ${
-                                                                            active ? 'border-secondary bg-secondary text-black' : 'border-white/20'
-                                                                        }`}
-                                                                    >
-                                                                        {active && (
-                                                                            <Check
-                                                                                className="h-3 w-3"
-                                                                                strokeWidth={3}
-                                                                            />
-                                                                        )}
-                                                                    </div>
-                                                                    {ALL_TRACKS[trackId].label}
-                                                                </button>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                </>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Subtitle Timeline */}
-                                {timelineTracksToDisplay.length > 0 && status === 'done' && (
-                                    <div className="mt-4 rounded-lg border border-white/5 bg-white/2">
-                                        <SubtitleTimeline
-                                            tracks={timelineTracksToDisplay}
-                                            duration={duration}
-                                            currentTime={currentTime}
-                                            activeSubtitleId={activeSubtitle?.id ?? null}
-                                            onSeek={seekTo}
-                                            onSubtitleUpdate={handleTimelineSubtitleUpdate}
-                                            onSubtitleTextEdit={(trackId, sub) => {
-                                                setSubtitleView(trackId);
-                                                startEditing(sub);
-                                            }}
-                                            onSubtitlesDelete={ids => ids.forEach(removeSubtitle)}
-                                            onSubtitleAdd={addNewSubtitle}
-                                        />
-                                    </div>
-                                )}
-
-                                {/* Keyboard shortcuts hint */}
-                                <div className="mt-4 flex justify-center gap-6 text-[10px] text-white/20">
-                                    <span className="flex items-center gap-1.5">
-                                        <kbd className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-white/40">&larr;</kbd>
-                                        <span>-5s</span>
-                                    </span>
-                                    <span className="flex items-center gap-1.5">
-                                        <kbd className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-white/40">Space</kbd>
-                                        <span>Play</span>
-                                    </span>
-                                    <span className="flex items-center gap-1.5">
-                                        <kbd className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-white/40">&rarr;</kbd>
-                                        <span>+5s</span>
-                                    </span>
-                                    <span className="flex items-center gap-1.5">
-                                        <kbd className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-white/40">Ctrl + Z</kbd>
-                                        <span>Undo</span>
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Subtitles panel */}
-                        <div className="flex w-80 shrink-0 flex-col border-l border-white/5 bg-[#0c0c0e]">
-                            <div className="flex items-center justify-between border-b border-white/5 px-4 py-3">
-                                <span className="text-xs font-medium text-white/60">Sous-titres</span>
-                                <div className="flex items-center gap-2">
-                                    {status === 'done' && subtitles.length > 0 && (
-                                        <>
                                             <button
                                                 onClick={() => setShowContextModal(true)}
-                                                className="flex items-center gap-1.5 rounded-md bg-white/5 px-2.5 py-1.5 text-[10px] font-medium text-white/60 transition-all hover:bg-white/10 hover:text-white"
+                                                className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/5 text-white/60 transition-all hover:bg-white/10 hover:text-white"
                                                 title="Mots de contexte"
                                             >
                                                 <SlidersHorizontal className="h-4 w-4" />
                                             </button>
-                                            <button
-                                                onClick={handleReload}
-                                                disabled={isTranslating}
-                                                className="flex items-center gap-1.5 rounded-md bg-white/5 px-2.5 py-1.5 text-[10px] font-medium text-white/60 transition-all hover:bg-white/10 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed"
-                                                title={subtitleView === 'original' ? 'Regénérer les sous-titres' : 'Retraduire'}
-                                            >
-                                                {isTranslating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                                            </button>
-                                            <button
-                                                onClick={() => srtInputRef.current?.click()}
-                                                className="flex items-center gap-1.5 rounded-md bg-white/5 px-2.5 py-1.5 text-[10px] font-medium text-white/60 transition-all hover:bg-white/10 hover:text-white"
-                                                title="Importer un fichier .srt"
-                                            >
-                                                <Upload className="h-4 w-4" />
-                                            </button>
-                                        </>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* View tabs */}
-                            {status === 'done' && subtitles.length > 0 && (
-                                <div className="flex border-b border-white/5">
-                                    {(Object.keys(ALL_TRACKS) as SubtitleView[]).map(trackId => {
-                                        const track = ALL_TRACKS[trackId];
-
-                                        return (
-                                            <button
-                                                key={trackId}
-                                                onClick={() => {
-                                                    if (trackId === 'original') {
-                                                        setSubtitleView('original');
-                                                    } else {
-                                                        handleTranslate(trackId).then(() => null);
-                                                    }
-                                                }}
-                                                disabled={isTranslating && trackId !== 'original'}
-                                                className={`flex flex-1 items-center justify-center gap-1.5 py-2 text-[10px] font-medium transition-all disabled:opacity-40 ${
-                                                    subtitleView === trackId
-                                                        ? 'text-white bg-white/5'
-                                                        : 'text-white/40 hover:text-white/60 hover:bg-white/2'
-                                                }`}
-                                                title={track.label}
-                                            >
-                                                {track.icon}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            )}
-
-                            {/* Processing state */}
-                            {isProcessing && (
-                                <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6">
-                                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-                                        <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                                    </div>
-                                    <p className="text-sm font-medium text-white/80">{progressLabel}</p>
-                                </div>
-                            )}
-
-                            {/* Error state */}
-                            {status === 'error' && (
-                                <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6">
-                                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-500/10">
-                                        <AlertCircle className="h-6 w-6 text-red-400" />
-                                    </div>
-                                    <div className="text-center">
-                                        <p className="text-sm font-medium text-red-400">Erreur</p>
-                                        <p className="mt-1 text-xs text-white/40">{error}</p>
-                                    </div>
-                                    <button
-                                        onClick={handleTranscribe}
-                                        className="mt-2 flex items-center gap-2 rounded-full bg-red-500/10 px-5 py-2.5 text-sm font-medium text-red-400 transition-all hover:bg-red-500/20"
-                                    >
-                                        <RefreshCw className="h-4 w-4" />
-                                        Réessayer
-                                    </button>
-                                </div>
-                            )}
-
-                            {/* Idle state */}
-                            {status === 'idle' && (
-                                <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6">
-                                    <div className="flex items-center gap-2">
-                                        <button
-                                            onClick={handleTranscribe}
-                                            className="flex items-center gap-2 rounded-lg bg-primary/85 px-6 py-2.5 text-sm font-medium text-white transition-all hover:bg-primary"
-                                        >
-                                            <MessageSquareText className="h-4 w-4" />
-                                            Générer les sous-titres
-                                        </button>
-                                        <button
-                                            onClick={() => setShowContextModal(true)}
-                                            className="flex items-center justify-center rounded-lg bg-white/5 p-2.5 text-white/60 transition-all hover:bg-white/10 hover:text-white"
-                                            title="Mots de contexte"
-                                        >
-                                            <SlidersHorizontal className="h-4 w-4" />
-                                        </button>
-                                    </div>
-                                    <button
-                                        onClick={() => srtInputRef.current?.click()}
-                                        className="text-xs text-white/40 underline-offset-2 transition-colors hover:text-white/70 hover:underline"
-                                    >
-                                        ou importer un fichier .srt
-                                    </button>
-                                </div>
-                            )}
-
-                            {/* Translating state */}
-                            {isTranslating && subtitleView !== 'original' && (
-                                <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6">
-                                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-                                        <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                                    </div>
-                                    <p className="text-sm font-medium text-white/80">Traduction...</p>
-                                </div>
-                            )}
-
-                            {/* Translation error state */}
-                            {!isTranslating && subtitleView !== 'original' && translationError && (
-                                <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6">
-                                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-500/10">
-                                        <AlertCircle className="h-6 w-6 text-red-400" />
-                                    </div>
-                                    <div className="text-center">
-                                        <p className="text-sm font-medium text-red-400">Erreur de traduction</p>
-                                        <p className="mt-1 text-xs text-white/40">{translationError}</p>
-                                    </div>
-                                    <button
-                                        onClick={() => handleTranslate(subtitleView, true)}
-                                        className="mt-2 flex items-center gap-2 rounded-full bg-red-500/10 px-5 py-2.5 text-sm font-medium text-red-400 transition-all hover:bg-red-500/20"
-                                    >
-                                        <RefreshCw className="h-4 w-4" />
-                                        Réessayer
-                                    </button>
-                                </div>
-                            )}
-
-                            {/* Subtitles list */}
-                            {status === 'done' &&
-                                !isTranslating &&
-                                !(subtitleView !== 'original' && translationError) &&
-                                displayedSubtitles.length > 0 && (
-                                    <div className="flex flex-1 flex-col overflow-hidden">
-                                        <div
-                                            ref={subtitleListRef}
-                                            className="flex-1 overflow-y-auto scrollbar-dark"
-                                        >
-                                            {displayedSubtitles.map(sub =>
-                                                editingId === sub.id ? (
-                                                    <div
-                                                        ref={el => {
-                                                            editContainerRef.current = el;
-
-                                                            if (el) {
-                                                                subtitleElRefs.current.set(sub.id, el);
-                                                            } else {
-                                                                subtitleElRefs.current.delete(sub.id);
-                                                            }
-                                                        }}
-                                                        key={sub.id}
-                                                        className="w-full px-4 py-3 border-b border-white/5 bg-violet-500/10"
-                                                    >
-                                                        {/* Time editing */}
-                                                        <div className="flex flex-col gap-1.5 mb-2">
-                                                            <div className="flex items-center gap-2">
-                                                                <ScrubInput
-                                                                    label="Début"
-                                                                    value={editStart}
-                                                                    onChange={setEditStart}
-                                                                    onCommit={saveEdit}
-                                                                    onCancel={cancelEdit}
-                                                                    onSetCurrent={() => setEditStart(formatTime(currentTime))}
-                                                                />
-                                                                <div className="ml-auto flex items-center gap-1.5">
-                                                                    <button
-                                                                        onClick={() => removeSubtitle(sub.id)}
-                                                                        className="flex h-6 w-6 items-center justify-center rounded-md text-white/40 transition-all hover:bg-red-500/15 hover:text-red-400"
-                                                                        title="Supprimer le sous-titre"
-                                                                    >
-                                                                        <Trash2 className="size-3.5" />
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={cancelEdit}
-                                                                        className="h-6 rounded bg-red-600 px-2.5 text-[10px] font-medium text-white transition-all hover:bg-red-500"
-                                                                    >
-                                                                        Annuler
-                                                                    </button>
-                                                                </div>
-                                                            </div>
-
-                                                            <ScrubInput
-                                                                label="Fin"
-                                                                value={editEnd}
-                                                                onChange={setEditEnd}
-                                                                onCommit={saveEdit}
-                                                                onCancel={cancelEdit}
-                                                                onSetCurrent={() => setEditEnd(formatTime(currentTime))}
-                                                            />
-
-                                                            {/* Duration indicator */}
-                                                            {(() => {
-                                                                const start = parseTime(editStart);
-                                                                const end = parseTime(editEnd);
-                                                                const duration = start && end ? end - start : null;
-                                                                const isInvalid = duration && duration <= 0;
-
-                                                                return (
-                                                                    <div className="flex items-center gap-1.5 ml-10">
-                                                                        <span
-                                                                            className={`text-[10px] font-mono ${isInvalid ? 'text-red-400' : 'text-white/40'}`}
-                                                                        >
-                                                                            Durée:{' '}
-                                                                            {duration ? (isInvalid ? 'invalide' : `${duration.toFixed(2)}s`) : '—'}
-                                                                        </span>
-                                                                    </div>
-                                                                );
-                                                            })()}
-                                                        </div>
-
-                                                        <textarea
-                                                            value={editText}
-                                                            onChange={e => setEditText(e.target.value)}
-                                                            onKeyDown={e => {
-                                                                if (e.key === 'Enter' && !e.shiftKey) {
-                                                                    e.preventDefault();
-                                                                    saveEdit();
-                                                                }
-
-                                                                if (e.key === 'Escape') {
-                                                                    cancelEdit();
-                                                                }
-                                                            }}
-                                                            rows={1}
-                                                            className="w-full field-sizing-content resize-none rounded border-none bg-white/10 px-2 py-1 text-xs leading-relaxed text-white outline-none focus:ring-1 focus:ring-inset focus:ring-primary"
-                                                        />
-                                                    </div>
-                                                ) : (
-                                                    <button
-                                                        ref={el => {
-                                                            if (el) {
-                                                                subtitleElRefs.current.set(sub.id, el);
-                                                            } else {
-                                                                subtitleElRefs.current.delete(sub.id);
-                                                            }
-                                                        }}
-                                                        key={sub.id}
-                                                        onClick={() => seekTo(sub.start)}
-                                                        onDoubleClick={() => startEditing(sub)}
-                                                        className={`w-full text-left px-4 py-3 border-b border-white/5 transition-all hover:bg-white/5 ${
-                                                            activeSubtitle?.id === sub.id ? 'bg-violet-500/10' : ''
-                                                        }`}
-                                                    >
-                                                        <div className="flex items-center gap-2 mb-1">
-                                                            <span className="text-[10px] font-mono text-white/30">{formatTime(sub.start)}</span>
-                                                            <span className="text-[10px] text-white/20">&rarr;</span>
-                                                            <span className="text-[10px] font-mono text-white/30">{formatTime(sub.end)}</span>
-                                                        </div>
-                                                        <p
-                                                            className={`text-xs leading-relaxed ${activeSubtitle?.id === sub.id ? 'text-white' : 'text-white/60'}`}
-                                                        >
-                                                            {sub.text}
-                                                        </p>
-                                                    </button>
-                                                )
-                                            )}
                                         </div>
-                                        <div className="px-4 py-2">
-                                            <button
-                                                onClick={() => {
-                                                    const start = currentTime;
-                                                    const end = Math.min(start + 1, duration);
-
-                                                    addNewSubtitle(start, end);
-                                                }}
-                                                className="flex w-full items-center justify-center gap-1.5 rounded-md bg-white/5 py-2 text-[11px] font-medium text-white/50 transition-all hover:bg-white/10 hover:text-white/80"
-                                                title="Ajouter un sous-titre"
-                                            >
-                                                <Plus className="h-3.5 w-3.5" />
-                                                Ajouter
-                                            </button>
-                                        </div>
+                                        <button
+                                            onClick={() => srtInputRef.current?.click()}
+                                            className="text-xs text-white/40 underline-offset-2 transition-colors hover:text-white/70 hover:underline"
+                                        >
+                                            ou importer un fichier .srt
+                                        </button>
                                     </div>
                                 )}
-                        </div>
+
+                                {/* Translating state */}
+                                {isTranslating && subtitleView !== 'original' && (
+                                    <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6">
+                                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+                                            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                                        </div>
+                                        <p className="text-sm font-medium text-white/80">Traduction...</p>
+                                    </div>
+                                )}
+
+                                {/* Translation error state */}
+                                {!isTranslating && subtitleView !== 'original' && translationError && (
+                                    <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6">
+                                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-500/10">
+                                            <AlertCircle className="h-6 w-6 text-red-400" />
+                                        </div>
+                                        <div className="text-center">
+                                            <p className="text-sm font-medium text-red-400">Erreur de traduction</p>
+                                            <p className="mt-1 text-xs text-white/40">{translationError}</p>
+                                        </div>
+                                        <button
+                                            onClick={() => handleTranslate(subtitleView, true)}
+                                            className="mt-2 flex items-center gap-2 rounded-full bg-red-500/10 px-5 py-2.5 text-sm font-medium text-red-400 transition-all hover:bg-red-500/20"
+                                        >
+                                            <RefreshCw className="h-4 w-4" />
+                                            Réessayer
+                                        </button>
+                                    </div>
+                                )}
+
+                                {/* Subtitles list */}
+                                {status === 'done' &&
+                                    !isTranslating &&
+                                    !(subtitleView !== 'original' && translationError) &&
+                                    displayedSubtitles.length > 0 && (
+                                        <div className="flex flex-1 flex-col overflow-hidden">
+                                            <div
+                                                ref={subtitleListRef}
+                                                className="flex-1 overflow-y-auto scrollbar-dark"
+                                            >
+                                                {displayedSubtitles.map(sub =>
+                                                    editingId === sub.id ? (
+                                                        <div
+                                                            ref={el => {
+                                                                editContainerRef.current = el;
+
+                                                                if (el) {
+                                                                    subtitleElRefs.current.set(sub.id, el);
+                                                                } else {
+                                                                    subtitleElRefs.current.delete(sub.id);
+                                                                }
+                                                            }}
+                                                            key={sub.id}
+                                                            className="w-full px-4 py-3 border-b border-white/5 bg-violet-500/10"
+                                                        >
+                                                            {/* Time editing */}
+                                                            <div className="flex flex-col gap-1.5 mb-2">
+                                                                <div className="flex items-center gap-2">
+                                                                    <ScrubInput
+                                                                        label="Début"
+                                                                        value={editStart}
+                                                                        onChange={setEditStart}
+                                                                        onCommit={saveEdit}
+                                                                        onCancel={cancelEdit}
+                                                                        onSetCurrent={() => setEditStart(formatTime(currentTime))}
+                                                                    />
+                                                                    <div className="ml-auto flex items-center gap-1.5">
+                                                                        <button
+                                                                            onClick={() => removeSubtitle(sub.id)}
+                                                                            className="flex h-6 w-6 items-center justify-center rounded-md text-white/40 transition-all hover:bg-red-500/15 hover:text-red-400"
+                                                                            title="Supprimer le sous-titre"
+                                                                        >
+                                                                            <Trash2 className="size-3.5" />
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={cancelEdit}
+                                                                            className="h-6 rounded bg-red-600 px-2.5 text-[10px] font-medium text-white transition-all hover:bg-red-500"
+                                                                        >
+                                                                            Annuler
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+
+                                                                <ScrubInput
+                                                                    label="Fin"
+                                                                    value={editEnd}
+                                                                    onChange={setEditEnd}
+                                                                    onCommit={saveEdit}
+                                                                    onCancel={cancelEdit}
+                                                                    onSetCurrent={() => setEditEnd(formatTime(currentTime))}
+                                                                />
+
+                                                                {/* Duration indicator */}
+                                                                {(() => {
+                                                                    const start = parseTime(editStart);
+                                                                    const end = parseTime(editEnd);
+                                                                    const duration = start && end ? end - start : null;
+                                                                    const isInvalid = duration && duration <= 0;
+
+                                                                    return (
+                                                                        <div className="flex items-center gap-1.5 ml-10">
+                                                                            <span
+                                                                                className={`text-[10px] font-mono ${isInvalid ? 'text-red-400' : 'text-white/40'}`}
+                                                                            >
+                                                                                Durée:{' '}
+                                                                                {duration
+                                                                                    ? isInvalid
+                                                                                        ? 'invalide'
+                                                                                        : `${duration.toFixed(2)}s`
+                                                                                    : '—'}
+                                                                            </span>
+                                                                        </div>
+                                                                    );
+                                                                })()}
+                                                            </div>
+
+                                                            <textarea
+                                                                value={editText}
+                                                                onChange={e => setEditText(e.target.value)}
+                                                                onKeyDown={e => {
+                                                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                                                        e.preventDefault();
+                                                                        saveEdit();
+                                                                    }
+
+                                                                    if (e.key === 'Escape') {
+                                                                        cancelEdit();
+                                                                    }
+                                                                }}
+                                                                rows={1}
+                                                                className="w-full field-sizing-content resize-none rounded border-none bg-white/10 px-2 py-1 text-xs leading-relaxed text-white outline-none focus:ring-1 focus:ring-inset focus:ring-primary"
+                                                            />
+                                                        </div>
+                                                    ) : (
+                                                        <button
+                                                            ref={el => {
+                                                                if (el) {
+                                                                    subtitleElRefs.current.set(sub.id, el);
+                                                                } else {
+                                                                    subtitleElRefs.current.delete(sub.id);
+                                                                }
+                                                            }}
+                                                            key={sub.id}
+                                                            onClick={() => seekTo(sub.start)}
+                                                            onDoubleClick={() => startEditing(sub)}
+                                                            className={`w-full text-left px-4 py-3 border-b border-white/5 transition-all hover:bg-white/5 ${
+                                                                activeSubtitle?.id === sub.id ? 'bg-violet-500/10' : ''
+                                                            }`}
+                                                        >
+                                                            <div className="flex items-center gap-2 mb-1">
+                                                                <span className="text-[10px] font-mono text-white/30">{formatTime(sub.start)}</span>
+                                                                <span className="text-[10px] text-white/20">&rarr;</span>
+                                                                <span className="text-[10px] font-mono text-white/30">{formatTime(sub.end)}</span>
+                                                            </div>
+                                                            <p
+                                                                className={`text-xs leading-relaxed ${activeSubtitle?.id === sub.id ? 'text-white' : 'text-white/60'}`}
+                                                            >
+                                                                {sub.text}
+                                                            </p>
+                                                        </button>
+                                                    )
+                                                )}
+                                            </div>
+                                            <div className="px-4 py-2">
+                                                <button
+                                                    onClick={() => {
+                                                        const start = currentTime;
+                                                        const end = Math.min(start + 1, duration);
+
+                                                        addNewSubtitle(start, end);
+                                                    }}
+                                                    className="flex w-full items-center justify-center gap-1.5 rounded-md bg-white/5 py-2 text-[11px] font-medium text-white/50 transition-all hover:bg-white/10 hover:text-white/80"
+                                                    title="Ajouter un sous-titre"
+                                                >
+                                                    <Plus className="h-3.5 w-3.5" />
+                                                    Ajouter
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                            </Panel>
+                        </PanelGroup>
                     </div>
                 )}
             </main>
