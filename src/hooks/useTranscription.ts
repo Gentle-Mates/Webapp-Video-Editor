@@ -107,5 +107,33 @@ export default function useTranscription() {
         setError(null);
     }
 
-    return { status, subtitles, error, transcribe, reset, updateSubtitle, addSubtitle, deleteSubtitle, restoreSubtitle };
+    function loadSubtitles(subs: Subtitle[]) {
+        const normalized = subs.map((s, i) => ({ ...s, id: i + 1 }));
+
+        setSubtitles(normalized);
+
+        nextId.current = normalized.length + 1;
+
+        setError(null);
+        setStatus('done');
+    }
+
+    function setLoadError(message: string) {
+        setError(message);
+        setStatus('error');
+    }
+
+    return {
+        status,
+        subtitles,
+        error,
+        transcribe,
+        reset,
+        updateSubtitle,
+        addSubtitle,
+        deleteSubtitle,
+        restoreSubtitle,
+        loadSubtitles,
+        setLoadError
+    };
 }

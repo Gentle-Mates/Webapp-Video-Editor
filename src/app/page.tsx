@@ -28,7 +28,7 @@ import { signOut } from 'next-auth/react';
 import type { DragEvent, ChangeEvent } from 'react';
 
 import { ALL_TRACKS } from '@/components/Tracks';
-import { generateSRT, downloadSRT } from '@/utils/srt';
+import { generateSRT, downloadSRT, parseSRT } from '@/utils/srt';
 import { formatTime, parseTime } from '@/utils/time';
 import type { Subtitle, SubtitleView, TranslationMode, SubtitleTrack } from '@/utils/types';
 
@@ -78,12 +78,14 @@ export default function Home() {
 
     const videoRef = useRef<HTMLVideoElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const srtInputRef = useRef<HTMLInputElement>(null);
     const subtitleListRef = useRef<HTMLDivElement>(null);
     const editContainerRef = useRef<HTMLDivElement>(null);
     const subtitleElRefs = useRef<Map<number, HTMLElement>>(new Map());
     const exportMenuRef = useRef<HTMLDivElement>(null);
 
-    const { status, subtitles, error, transcribe, reset, updateSubtitle, addSubtitle, deleteSubtitle, restoreSubtitle } = useTranscription();
+    const { status, subtitles, error, transcribe, reset, updateSubtitle, addSubtitle, deleteSubtitle, restoreSubtitle, loadSubtitles, setLoadError } =
+        useTranscription();
     const { settings, saving: settingsSaving, updateSettings } = useSettings();
     const settingsContextWords = useMemo(() => settings?.contextWords ?? [], [settings?.contextWords]);
     const { words: contextWords, addWord, removeWord, resetWords, maxWords } = useContextWords(settingsContextWords);
@@ -399,6 +401,28 @@ export default function Home() {
         }
     }
 
+    function handleImportSRT(e: ChangeEvent<HTMLInputElement>) {
+        const file = e.target.files?.[0];
+
+        if (!file) {
+            return;
+        }
+
+        e.target.value = '';
+
+        file.text().then(content => {
+            try {
+                const subs = parseSRT(content);
+
+                resetTranslations();
+                setSubtitleView('original');
+                loadSubtitles(subs);
+            } catch (err) {
+                setLoadError(err instanceof Error ? err.message : 'Fichier SRT invalide');
+            }
+        });
+    }
+
     useEffect(() => {
         if (!showExportMenu) {
             return;
@@ -645,6 +669,59 @@ export default function Home() {
                     <div />
                 )}
                 <div className="flex items-center justify-end gap-3">
+                    {status === 'done' && subtitles.length > 0 && (
+                        <div
+                            className="relative"
+                            ref={exportMenuRef}
+                        >
+                            <button
+                                onClick={() => setShowExportMenu(v => !v)}
+                                className="flex items-center gap-1.5 rounded-md bg-white/5 px-2.5 py-1.5 text-[11px] font-medium text-white/90 transition-all hover:bg-white/10"
+                                title="Exporter SRT"
+                            >
+                                <Download className="h-3.5 w-3.5" />
+                                Exporter
+                            </button>
+                            {showExportMenu && (
+                                <div className="absolute right-0 top-full z-20 mt-2 min-w-40 rounded-xl border border-white/10 bg-[#141416] p-1.5 shadow-xl">
+                                    {tracks.map(track => {
+                                        const checked = exportSelection[track];
+
+                                        return (
+                                            <button
+                                                key={track}
+                                                onClick={() => setExportSelection(prev => ({ ...prev, [track]: !prev[track] }))}
+                                                className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-[11px] text-white/70 transition-all hover:bg-white/5"
+                                            >
+                                                <div
+                                                    className={`flex h-4 w-4 items-center justify-center rounded border transition-all ${
+                                                        checked ? 'border-secondary bg-secondary/20' : 'border-white/20'
+                                                    }`}
+                                                >
+                                                    {checked && (
+                                                        <Check
+                                                            className="h-2.5 w-2.5 text-secondary"
+                                                            strokeWidth={3}
+                                                        />
+                                                    )}
+                                                </div>
+                                                {ALL_TRACKS[track].label}
+                                            </button>
+                                        );
+                                    })}
+                                    <div className="mt-1 pt-1">
+                                        <button
+                                            onClick={handleExportSRT}
+                                            disabled={selectedExportCount === 0}
+                                            className="flex w-full items-center justify-center rounded-lg bg-secondary/20 px-3 py-1.5 text-[11px] font-medium text-secondary transition-all hover:bg-secondary/30 disabled:opacity-40 disabled:cursor-not-allowed"
+                                        >
+                                            Télécharger ({selectedExportCount})
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
                     <button
                         onClick={() => setShowSettingsModal(true)}
                         className="flex items-center gap-1.5 rounded-md bg-white/5 px-2.5 py-1.5 text-[11px] font-medium text-white/90 transition-all hover:bg-white/10"
@@ -696,6 +773,13 @@ export default function Home() {
                 ) : (
                     /* Video editor */
                     <div className="flex flex-1 overflow-hidden">
+                        <input
+                            ref={srtInputRef}
+                            type="file"
+                            accept=".srt"
+                            onChange={handleImportSRT}
+                            className="hidden"
+                        />
                         {/* Video */}
                         <div className="flex flex-1 flex-col overflow-hidden min-w-0">
                             <div className="relative flex flex-1 items-center justify-center bg-black min-h-0">
@@ -1089,56 +1173,6 @@ export default function Home() {
                                 <div className="flex items-center gap-2">
                                     {status === 'done' && subtitles.length > 0 && (
                                         <>
-                                            <div
-                                                className="relative"
-                                                ref={exportMenuRef}
-                                            >
-                                                <button
-                                                    onClick={() => setShowExportMenu(v => !v)}
-                                                    className="flex items-center gap-1.5 rounded-md bg-white/5 px-2.5 py-1.5 text-[10px] font-medium text-white/60 transition-all hover:bg-white/10 hover:text-white"
-                                                    title="Exporter SRT"
-                                                >
-                                                    <Download className="h-4 w-4" />
-                                                </button>
-                                                {showExportMenu && (
-                                                    <div className="absolute right-0 top-full z-20 mt-2 min-w-40 rounded-xl border border-white/10 bg-[#141416] p-1.5 shadow-xl">
-                                                        {tracks.map(track => {
-                                                            const checked = exportSelection[track];
-
-                                                            return (
-                                                                <button
-                                                                    key={track}
-                                                                    onClick={() => setExportSelection(prev => ({ ...prev, [track]: !prev[track] }))}
-                                                                    className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-[11px] text-white/70 transition-all hover:bg-white/5"
-                                                                >
-                                                                    <div
-                                                                        className={`flex h-4 w-4 items-center justify-center rounded border transition-all ${
-                                                                            checked ? 'border-secondary bg-secondary/20' : 'border-white/20'
-                                                                        }`}
-                                                                    >
-                                                                        {checked && (
-                                                                            <Check
-                                                                                className="h-2.5 w-2.5 text-secondary"
-                                                                                strokeWidth={3}
-                                                                            />
-                                                                        )}
-                                                                    </div>
-                                                                    {ALL_TRACKS[track].label}
-                                                                </button>
-                                                            );
-                                                        })}
-                                                        <div className="mt-1 pt-1">
-                                                            <button
-                                                                onClick={handleExportSRT}
-                                                                disabled={selectedExportCount === 0}
-                                                                className="flex w-full items-center justify-center rounded-lg bg-secondary/20 px-3 py-1.5 text-[11px] font-medium text-secondary transition-all hover:bg-secondary/30 disabled:opacity-40 disabled:cursor-not-allowed"
-                                                            >
-                                                                Télécharger ({selectedExportCount})
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
                                             <button
                                                 onClick={() => setShowContextModal(true)}
                                                 className="flex items-center gap-1.5 rounded-md bg-white/5 px-2.5 py-1.5 text-[10px] font-medium text-white/60 transition-all hover:bg-white/10 hover:text-white"
@@ -1153,6 +1187,13 @@ export default function Home() {
                                                 title={subtitleView === 'original' ? 'Regénérer les sous-titres' : 'Retraduire'}
                                             >
                                                 {isTranslating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                                            </button>
+                                            <button
+                                                onClick={() => srtInputRef.current?.click()}
+                                                className="flex items-center gap-1.5 rounded-md bg-white/5 px-2.5 py-1.5 text-[10px] font-medium text-white/60 transition-all hover:bg-white/10 hover:text-white"
+                                                title="Importer un fichier .srt"
+                                            >
+                                                <Upload className="h-4 w-4" />
                                             </button>
                                         </>
                                     )}
@@ -1222,7 +1263,7 @@ export default function Home() {
 
                             {/* Idle state */}
                             {status === 'idle' && (
-                                <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6">
+                                <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6">
                                     <div className="flex items-center gap-2">
                                         <button
                                             onClick={handleTranscribe}
@@ -1239,6 +1280,12 @@ export default function Home() {
                                             <SlidersHorizontal className="h-4 w-4" />
                                         </button>
                                     </div>
+                                    <button
+                                        onClick={() => srtInputRef.current?.click()}
+                                        className="text-xs text-white/40 underline-offset-2 transition-colors hover:text-white/70 hover:underline"
+                                    >
+                                        ou importer un fichier .srt
+                                    </button>
                                 </div>
                             )}
 
