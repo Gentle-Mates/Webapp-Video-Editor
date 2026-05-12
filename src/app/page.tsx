@@ -46,37 +46,34 @@ import useSettings from '@/hooks/useSettings';
 function EditorLayout({ withTimeline, children }: { withTimeline: boolean; children: [ReactNode, ReactNode] }) {
     const [video, controls] = children;
 
-    if (withTimeline) {
-        return (
-            <PanelGroup
-                direction="vertical"
-                autoSaveId="editor-vertical"
-            >
-                <Panel
-                    defaultSize={68}
-                    minSize={30}
-                    className="flex flex-col min-w-0"
-                >
-                    {video}
-                </Panel>
-                <PanelResizeHandle className="h-1 bg-white/5 transition-colors hover:bg-white/30 data-[resize-handle-state=drag]:bg-primary/50" />
-                <Panel
-                    defaultSize={32}
-                    minSize={10}
-                    maxSize={70}
-                    className="flex flex-col"
-                >
-                    <div className="flex-1 overflow-hidden border-t border-white/5 bg-[#0c0c0e] px-6 py-4">{controls}</div>
-                </Panel>
-            </PanelGroup>
-        );
-    }
-
     return (
-        <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
-            {video}
-            <div className="shrink-0 border-t border-white/5 bg-[#0c0c0e] px-6 py-4">{controls}</div>
-        </div>
+        <PanelGroup
+            direction="vertical"
+            autoSaveId="editor-vertical"
+        >
+            <Panel
+                defaultSize={withTimeline ? 68 : 100}
+                minSize={30}
+                className="flex flex-col min-w-0"
+            >
+                {video}
+            </Panel>
+            {withTimeline ? (
+                <>
+                    <PanelResizeHandle className="h-1 bg-white/5 transition-colors hover:bg-white/30 data-[resize-handle-state=drag]:bg-primary/50" />
+                    <Panel
+                        defaultSize={32}
+                        minSize={17}
+                        maxSize={70}
+                        className="flex flex-col"
+                    >
+                        <div className="flex-1 overflow-hidden border-t border-white/5 bg-[#0c0c0e] px-6 py-4">{controls}</div>
+                    </Panel>
+                </>
+            ) : (
+                <div className="shrink-0 border-t border-white/5 bg-[#0c0c0e] px-6 py-4">{controls}</div>
+            )}
+        </PanelGroup>
     );
 }
 
@@ -545,42 +542,10 @@ export default function Home() {
             return;
         }
 
-        const handleTimeUpdate = () => {
-            if (!isDragging) {
-                setCurrentTime(video.currentTime);
-            }
-        };
-
-        const handleLoadedMetadata = () => {
-            setDuration(video.duration);
-        };
-
-        const handleDurationChange = () => {
-            if (video.duration && !isNaN(video.duration)) {
-                setDuration(video.duration);
-            }
-        };
-
-        const handleEnded = () => {
-            setIsPlaying(false);
-        };
-
-        video.addEventListener('timeupdate', handleTimeUpdate);
-        video.addEventListener('loadedmetadata', handleLoadedMetadata);
-        video.addEventListener('durationchange', handleDurationChange);
-        video.addEventListener('ended', handleEnded);
-
         if (video.duration && !isNaN(video.duration)) {
             setDuration(video.duration);
         }
-
-        return () => {
-            video.removeEventListener('timeupdate', handleTimeUpdate);
-            video.removeEventListener('loadedmetadata', handleLoadedMetadata);
-            video.removeEventListener('durationchange', handleDurationChange);
-            video.removeEventListener('ended', handleEnded);
-        };
-    }, [isDragging, videoSrc]);
+    }, [videoSrc]);
 
     const handleUndo = useEffectEvent(() => {
         if (undoStack.length === 0) {
@@ -870,6 +835,22 @@ export default function Home() {
                                             src={videoSrc}
                                             className="h-full w-full object-contain"
                                             onClick={togglePlay}
+                                            onTimeUpdate={() => {
+                                                if (!isDragging && videoRef.current) {
+                                                    setCurrentTime(videoRef.current.currentTime);
+                                                }
+                                            }}
+                                            onLoadedMetadata={() => {
+                                                if (videoRef.current) {
+                                                    setDuration(videoRef.current.duration);
+                                                }
+                                            }}
+                                            onDurationChange={() => {
+                                                if (videoRef.current && videoRef.current.duration && !isNaN(videoRef.current.duration)) {
+                                                    setDuration(videoRef.current.duration);
+                                                }
+                                            }}
+                                            onEnded={() => setIsPlaying(false)}
                                         />
 
                                         {activeOverlayTracks.length > 0 && (
@@ -1013,10 +994,7 @@ export default function Home() {
                                             </div>
 
                                             {/* Right: Timeline toggle + Subtitle overlay */}
-                                            <div
-                                                className="flex items-center justify-end gap-2"
-                                                style={{ width: '148px' }}
-                                            >
+                                            <div className="flex items-center justify-end gap-2 w-37">
                                                 {/* Timeline toggle */}
                                                 <div className="relative">
                                                     <button
