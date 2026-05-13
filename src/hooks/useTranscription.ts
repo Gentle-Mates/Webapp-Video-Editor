@@ -84,6 +84,8 @@ export default function useTranscription() {
         const sub: Subtitle = { id: nextId.current++, start, end, text };
 
         setSubtitles(prev => [...prev, sub].sort((a, b) => a.start - b.start));
+
+        return sub;
     }
 
     function deleteSubtitle(id: number) {

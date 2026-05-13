@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useEffectEvent, useMemo, type ReactNode } from 'react';
+import { useState, useRef, useEffect, useEffectEvent, useCallback, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import {
     SlidersHorizontal,
@@ -42,6 +42,17 @@ import useTranscription from '@/hooks/useTranscription';
 import useTranslation from '@/hooks/useTranslation';
 import useContextWords from '@/hooks/useContextWords';
 import useSettings from '@/hooks/useSettings';
+
+function positionPopover(popoverEl: HTMLDivElement | null, buttonRef: RefObject<HTMLButtonElement | null>) {
+    if (!popoverEl || !buttonRef.current) {
+        return;
+    }
+
+    const r = buttonRef.current.getBoundingClientRect();
+
+    popoverEl.style.bottom = `${window.innerHeight - r.top + 8}px`;
+    popoverEl.style.right = `${window.innerWidth - r.right}px`;
+}
 
 function EditorLayout({ withTimeline, children }: { withTimeline: boolean; children: [ReactNode, ReactNode] }) {
     const [video, controls] = children;
@@ -122,41 +133,13 @@ export default function Home() {
     const timelineMenuButtonRef = useRef<HTMLButtonElement>(null);
     const overlayMenuButtonRef = useRef<HTMLButtonElement>(null);
 
-    const setTimelineMenuPosition = (popoverEl: HTMLDivElement | null) => {
-        if (!popoverEl) {
-            return;
-        }
-
-        const r = timelineMenuButtonRef.current?.getBoundingClientRect();
-
-        if (!r) {
-            return;
-        }
-
-        popoverEl.style.bottom = `${window.innerHeight - r.top + 8}px`;
-        popoverEl.style.right = `${window.innerWidth - r.right}px`;
-    };
-
-    const setOverlayMenuPosition = (popoverEl: HTMLDivElement | null) => {
-        if (!popoverEl) {
-            return;
-        }
-
-        const r = overlayMenuButtonRef.current?.getBoundingClientRect();
-
-        if (!r) {
-            return;
-        }
-
-        popoverEl.style.bottom = `${window.innerHeight - r.top + 8}px`;
-        popoverEl.style.right = `${window.innerWidth - r.right}px`;
-    };
+    const setTimelineMenuPosition = useCallback((el: HTMLDivElement | null) => positionPopover(el, timelineMenuButtonRef), []);
+    const setOverlayMenuPosition = useCallback((el: HTMLDivElement | null) => positionPopover(el, overlayMenuButtonRef), []);
 
     const { status, subtitles, error, transcribe, reset, updateSubtitle, addSubtitle, deleteSubtitle, restoreSubtitle, loadSubtitles, setLoadError } =
         useTranscription();
     const { settings, saving: settingsSaving, updateSettings } = useSettings();
-    const settingsContextWords = useMemo(() => settings?.contextWords ?? [], [settings?.contextWords]);
-    const { words: contextWords, addWord, removeWord, resetWords, maxWords } = useContextWords(settingsContextWords);
+    const { words: contextWords, addWord, removeWord, resetWords, maxWords } = useContextWords(settings?.contextWords ?? []);
     const {
         translations,
         isTranslating,
@@ -188,39 +171,35 @@ export default function Home() {
     );
     const selectedExportCount = tracks.filter(t => exportSelection[t]).length;
 
-    const displayedSubtitles = useMemo(() => {
-        const subs = subtitleView === 'original' ? subtitles : translations[subtitleView].length > 0 ? translations[subtitleView] : subtitles;
-
-        return [...subs].sort((a, b) => a.start - b.start);
-    }, [subtitleView, subtitles, translations]);
+    const subs = subtitleView === 'original' ? subtitles : translations[subtitleView].length > 0 ? translations[subtitleView] : subtitles;
+    const displayedSubtitles = [...subs].sort((a, b) => a.start - b.start);
     const activeSubtitle = displayedSubtitles.find(sub => currentTime >= sub.start && currentTime <= sub.end) ?? null;
 
-    const timelineTracksToDisplay = useMemo(() => {
-        const activeTracks: SubtitleTrack[] = timelineTracks.showCurrent
-            ? [
-                  {
-                      id: subtitleView,
-                      label: '',
-                      subtitles: displayedSubtitles
-                  }
-              ]
-            : [];
+    const activeTracks: SubtitleTrack[] = timelineTracks.showCurrent
+        ? [
+              {
+                  id: subtitleView,
+                  label: '',
+                  subtitles: displayedSubtitles
+              }
+          ]
+        : [];
 
-        const otherTracks = (Object.keys(ALL_TRACKS) as SubtitleView[])
-            .filter(trackId => timelineTracks[trackId] && !(timelineTracks.showCurrent && trackId === subtitleView))
-            .map(trackId => {
-                const subs = trackId === 'original' ? subtitles : translations[trackId as TranslationMode];
-                return {
-                    id: trackId,
-                    label: ALL_TRACKS[trackId].label,
-                    subtitles: subs,
-                    icon: ALL_TRACKS[trackId].icon
-                };
-            })
-            .filter(track => track.subtitles.length > 0);
+    const otherTracks = (Object.keys(ALL_TRACKS) as SubtitleView[])
+        .filter(trackId => timelineTracks[trackId] && !(timelineTracks.showCurrent && trackId === subtitleView))
+        .map(trackId => {
+            const subs = trackId === 'original' ? subtitles : translations[trackId as TranslationMode];
 
-        return [...activeTracks, ...otherTracks];
-    }, [timelineTracks, subtitleView, displayedSubtitles, subtitles, translations]);
+            return {
+                id: trackId,
+                label: ALL_TRACKS[trackId].label,
+                subtitles: subs,
+                icon: ALL_TRACKS[trackId].icon
+            };
+        })
+        .filter(track => track.subtitles.length > 0);
+
+    const timelineTracksToDisplay = [...activeTracks, ...otherTracks];
 
     function toggleOverlayTrack(track: SubtitleView) {
         setOverlayTracks(prev => ({
@@ -230,35 +209,33 @@ export default function Home() {
         }));
     }
 
-    const activeOverlayTracks = useMemo(() => {
-        const overlayTracksToProcess: SubtitleView[] = [];
+    const overlayTracksToProcess: SubtitleView[] = [];
 
-        if (overlayTracks.showCurrent) {
-            overlayTracksToProcess.push(subtitleView);
-        }
+    if (overlayTracks.showCurrent) {
+        overlayTracksToProcess.push(subtitleView);
+    }
 
-        (Object.keys(overlayTracks) as (SubtitleView | 'showCurrent')[]).forEach(track => {
-            if (track !== 'showCurrent' && overlayTracks[track]) {
-                if (!(overlayTracks.showCurrent && track === subtitleView)) {
-                    overlayTracksToProcess.push(track as SubtitleView);
-                }
+    (Object.keys(overlayTracks) as (SubtitleView | 'showCurrent')[]).forEach(track => {
+        if (track !== 'showCurrent' && overlayTracks[track]) {
+            if (!(overlayTracks.showCurrent && track === subtitleView)) {
+                overlayTracksToProcess.push(track as SubtitleView);
             }
-        });
+        }
+    });
 
-        return overlayTracksToProcess
-            .map(track => {
-                const subs = track === 'original' ? subtitles : translations[track].length > 0 ? translations[track] : null;
+    const activeOverlayTracks = overlayTracksToProcess
+        .map(track => {
+            const subs = track === 'original' ? subtitles : translations[track].length > 0 ? translations[track] : null;
 
-                if (!subs) {
-                    return null;
-                }
+            if (!subs) {
+                return null;
+            }
 
-                const active = subs.find(sub => currentTime >= sub.start && currentTime <= sub.end);
+            const active = subs.find(sub => currentTime >= sub.start && currentTime <= sub.end);
 
-                return active ? { track, text: active.text } : null;
-            })
-            .filter((s): s is { track: SubtitleView; text: string } => s !== null);
-    }, [overlayTracks, subtitleView, subtitles, translations, currentTime]);
+            return active ? { track, text: active.text } : null;
+        })
+        .filter((s): s is { track: SubtitleView; text: string } => s !== null);
 
     function startEditing(sub: { id: number; text: string; start: number; end: number }) {
         setEditingId(sub.id);
@@ -357,9 +334,7 @@ export default function Home() {
     }
 
     function addNewSubtitle(start: number, end: number) {
-        addSubtitle(start, end, '');
-
-        const sub: Subtitle = { id: subtitles.reduce((max, sub) => Math.max(max, sub.id), 0) + 1, start, end, text: '' };
+        const sub = addSubtitle(start, end, '');
 
         addTranslatedSubtitle(sub);
         startEditing(sub);
@@ -469,7 +444,7 @@ export default function Home() {
         }
     }
 
-    function handleImportSRT(e: ChangeEvent<HTMLInputElement>) {
+    async function handleImportSRT(e: ChangeEvent<HTMLInputElement>) {
         const file = e.target.files?.[0];
 
         if (!file) {
@@ -478,17 +453,16 @@ export default function Home() {
 
         e.target.value = '';
 
-        file.text().then(content => {
-            try {
-                const subs = parseSRT(content);
+        try {
+            const content = await file.text();
+            const subs = parseSRT(content);
 
-                resetTranslations();
-                setSubtitleView('original');
-                loadSubtitles(subs);
-            } catch (err) {
-                setLoadError(err instanceof Error ? err.message : 'Fichier SRT invalide');
-            }
-        });
+            resetTranslations();
+            setSubtitleView('original');
+            loadSubtitles(subs);
+        } catch (err) {
+            setLoadError(err instanceof Error ? err.message : 'Fichier SRT invalide');
+        }
     }
 
     useEffect(() => {
@@ -835,9 +809,9 @@ export default function Home() {
                                             src={videoSrc}
                                             className="h-full w-full object-contain"
                                             onClick={togglePlay}
-                                            onTimeUpdate={() => {
-                                                if (!isDragging && videoRef.current) {
-                                                    setCurrentTime(videoRef.current.currentTime);
+                                            onTimeUpdate={e => {
+                                                if (!isDragging) {
+                                                    setCurrentTime((e.target as HTMLVideoElement).currentTime);
                                                 }
                                             }}
                                             onLoadedMetadata={() => {
@@ -1422,8 +1396,13 @@ export default function Home() {
                                                 ref={subtitleListRef}
                                                 className="flex-1 overflow-y-auto scrollbar-dark"
                                             >
-                                                {displayedSubtitles.map(sub =>
-                                                    editingId === sub.id ? (
+                                                {displayedSubtitles.map(sub => {
+                                                    const start = editingId === sub.id ? parseTime(editStart) : null;
+                                                    const end = editingId === sub.id ? parseTime(editEnd) : null;
+                                                    const editDuration = start && end ? end - start : null;
+                                                    const isDurationInvalid = editDuration !== null && editDuration <= 0;
+
+                                                    return editingId === sub.id ? (
                                                         <div
                                                             ref={el => {
                                                                 editContainerRef.current = el;
@@ -1475,27 +1454,18 @@ export default function Home() {
                                                                 />
 
                                                                 {/* Duration indicator */}
-                                                                {(() => {
-                                                                    const start = parseTime(editStart);
-                                                                    const end = parseTime(editEnd);
-                                                                    const duration = start && end ? end - start : null;
-                                                                    const isInvalid = duration && duration <= 0;
-
-                                                                    return (
-                                                                        <div className="flex items-center gap-1.5 ml-10">
-                                                                            <span
-                                                                                className={`text-[10px] font-mono ${isInvalid ? 'text-red-400' : 'text-white/40'}`}
-                                                                            >
-                                                                                Durée:{' '}
-                                                                                {duration
-                                                                                    ? isInvalid
-                                                                                        ? 'invalide'
-                                                                                        : `${duration.toFixed(2)}s`
-                                                                                    : '—'}
-                                                                            </span>
-                                                                        </div>
-                                                                    );
-                                                                })()}
+                                                                <div className="flex items-center gap-1.5 ml-10">
+                                                                    <span
+                                                                        className={`text-[10px] font-mono ${isDurationInvalid ? 'text-red-400' : 'text-white/40'}`}
+                                                                    >
+                                                                        Durée:{' '}
+                                                                        {editDuration
+                                                                            ? isDurationInvalid
+                                                                                ? 'invalide'
+                                                                                : `${editDuration.toFixed(2)}s`
+                                                                            : '—'}
+                                                                    </span>
+                                                                </div>
                                                             </div>
 
                                                             <textarea
@@ -1542,8 +1512,8 @@ export default function Home() {
                                                                 {sub.text}
                                                             </p>
                                                         </button>
-                                                    )
-                                                )}
+                                                    );
+                                                })}
                                             </div>
                                             <div className="px-4 py-2">
                                                 <button
